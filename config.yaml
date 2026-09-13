@@ -1,0 +1,113 @@
+# ═══════════════════════════════════════════════════════════════
+# OverWatchMK2 Configuration
+# Reiner Online-Anzeiger: ADS-B, FLARM/OGN, Starlink + SMS-Ortung
+# ═══════════════════════════════════════════════════════════════
+#
+# WICHTIG: Diese Datei liegt NEBEN der .exe / .app und wird bei einem
+# Versions-Update NIE überschrieben (siehe README.md/ANLEITUNG.md) --
+# eigene Anpassungen bleiben erhalten. Eine frische Kopie dieser Datei
+# ist in jedem Release-Zip enthalten und wird nur verwendet, falls
+# noch keine eigene config.yaml neben der exe liegt.
+
+# ── Web Server ──────────────────────────────────────────────────
+# host: "0.0.0.0" macht die Weboberfläche für ALLE Geräte im selben
+# Netzwerk erreichbar (Handy, Tablet, anderer PC) -- nicht nur lokal.
+server:
+  host: "0.0.0.0"
+  port: 8080
+  debug: false
+  secret_key: "overwatchmk2-changeme"
+
+# ── ADS-B (Flugzeuge, nur Internet-Anbieter) ─────────────────────
+adsb:
+  enabled: true
+  # "opensky"        – OpenSky Network. Anonym STARK rate-limitiert.
+  # "adsbfi"         – adsb.fi – Community-Anbieter, KEIN Account nötig
+  # "airplaneslive"  – airplanes.live – Community-Anbieter, KEIN Account nötig
+  # "adsblol"        – adsb.lol – Community-Anbieter, KEIN Account nötig
+  provider: "adsbfi"
+  api_url: "https://opensky-network.org/api/states/all"
+  radius_deg: 0.5          # Suchradius in Grad – nur für provider: opensky
+  radius_nm: 30            # Suchradius in nautischen Meilen – für adsbfi/airplaneslive/adsblol
+  poll_interval_sec: 15    # Sekunden zwischen ADS-B Internet-Abrufen
+  opensky:
+    username: ""
+    password: ""
+
+# ── FLARM/OGN (Segelflieger/Kleinflugzeuge, nur Internet-Netzwerk) ─
+flarm:
+  enabled: true
+  internet_call: "OVERWATCH2"   # frei wählbares APRS-Rufzeichen, rein lesend
+  internet_radius_km: 50
+  station_timeout_sec: 120
+  # internet_lat / internet_lon: optional, überschreibt map.default_lat/
+  # default_lon NUR für diese Quelle (z.B. falls Empfang um einen
+  # anderen Ort als die Standard-Kartenmitte zentriert sein soll).
+  # internet_lat: 51.5000
+  # internet_lon: 6.7000
+
+# ── Starlink Satelliten-Tracker (SGP4-Bahnberechnung aus TLE) ────
+starlink:
+  enabled: true
+  tle_url: "https://celestrak.org/NORAD/elements/gp.php?GROUP=starlink&FORMAT=tle"
+  tle_refresh_hours: 6
+  position_update_sec: 5
+  max_displayed: 300
+  viewport_padding_deg: 5.0
+  spacetrack:
+    username: ""
+    password: ""
+
+# ── SMS/GSM-Ortungsempfang (USB-UART-Adapter + Modem, z.B. SIM800) ─
+# Ein per USB-Seriell angeschlossenes GSM-Modem wird per AT-Kommandos
+# regelmäßig auf neue SMS abgefragt (siehe sms_gateway.py). Enthaltene
+# Koordinaten werden -- nach einmaligem Anlernen des SMS-Textformats
+# über die Weboberfläche (Menüpunkt "SMS-Ortung") -- automatisch auf
+# der Karte eingezeichnet: jede Absendernummer erhält eine eigene
+# Farbe und eine eigene, in Empfangsreihenfolge verbundene Punktkette.
+sms:
+  enabled: false
+  # Windows z.B. "COM3", Linux z.B. "/dev/ttyUSB0", macOS z.B.
+  # "/dev/cu.usbserial-0001" -- siehe ANLEITUNG.md Abschnitt "SMS-Ortung"
+  # zum Herausfinden des richtigen Ports.
+  port: ""
+  baudrate: 9600
+  poll_interval_sec: 5
+  # true: SMS wird nach Verarbeitung vom Modem/der SIM-Karte gelöscht
+  # (empfohlen, sonst läuft der begrenzte SIM-Speicher irgendwann voll
+  # und neue SMS können nicht mehr empfangen werden).
+  delete_after_read: true
+  # PIN der SIM-Karte, falls eine gesetzt ist (leer lassen falls nicht).
+  pin: ""
+
+# ── Karte ───────────────────────────────────────────────────────
+map:
+  default_lat: 51.1657
+  default_lon: 10.4515
+  default_zoom: 8
+  adsb_timeout_sec: 60
+  tile_url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+  satellite_url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+
+# ── Offline-Kartenkacheln (MBTiles) ──────────────────────────────
+# Liegt eine .mbtiles-Datei DIREKT NEBEN der .exe/.app (oder in einem
+# Unterordner "offline_map/" daneben), wird sie beim Programmstart
+# automatisch erkannt und als Offline-Kartenebene angeboten -- ganz
+# ohne Konfiguration hier. Siehe ANLEITUNG.md Abschnitt "Offline-Karte".
+offline_map:
+  enabled: true
+
+# ── No-Fly-Zonen (dipul/DFS-WMS, reiner Online-Dienst) ───────────
+noflyzones:
+  enabled: true
+  wms_url: "https://uas-betrieb.de/geoservices/dipul/wms"
+  wms_version: "1.3.0"
+  layers: "dipul:flugplaetze,dipul:flughaefen,dipul:modellflugplaetze,dipul:temporaere_betriebseinschraenkungen"
+  attribution: "Quelle Geodaten: DFS, BKG"
+
+# ── Logging ─────────────────────────────────────────────────────
+logging:
+  level: "INFO"
+  file: "overwatchmk2.log"
+  max_size_mb: 10
+  backup_count: 3

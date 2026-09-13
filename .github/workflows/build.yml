@@ -1,0 +1,139 @@
+name: Build OverWatchMK2 (Windows exe + macOS app)
+
+# Läuft bei jedem Push auf main (reiner Build-/Rauchtest, kein Release)
+# UND bei jedem Push eines Versions-Tags (z.B. "v1.0.0") -- dann wird
+# zusätzlich ein GitHub Release mit beiden fertigen Artefakten angelegt.
+# Auch manuell auslösbar über "Run workflow" im Actions-Tab.
+on:
+  push:
+    branches: [ "main" ]
+    tags: [ "v*.*.*" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch: {}
+
+permissions:
+  contents: write   # nötig, damit der release-Job ein GitHub Release anlegen darf
+
+jobs:
+  build-windows:
+    name: Windows .exe
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Python einrichten
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Abhängigkeiten installieren
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Syntaxprüfung (python3 -m py_compile)
+        run: |
+          python -m py_compile main.py sms_gateway.py ogn_receiver.py
+
+      - name: PyInstaller Build (OverWatchMK2.exe)
+        run: pyinstaller --clean --noconfirm OverWatchMK2.spec
+
+      - name: Release-Paket zusammenstellen
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path release_windows -Force | Out-Null
+          Copy-Item dist/OverWatchMK2.exe release_windows/
+          Copy-Item config.yaml release_windows/
+          Copy-Item README.md release_windows/
+          Copy-Item ANLEITUNG.md release_windows/
+          Copy-Item CHANGELOG.md release_windows/
+          New-Item -ItemType Directory -Path release_windows/offline_map -Force | Out-Null
+          New-Item -ItemType File -Path release_windows/offline_map/HIER_MBTILES_DATEI_ABLEGEN.txt -Force | Out-Null
+
+      - name: Artefakt hochladen
+        uses: actions/upload-artifact@v4
+        with:
+          name: OverWatchMK2-windows
+          path: release_windows/
+
+  build-macos:
+    name: macOS .app
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Python einrichten
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Abhängigkeiten installieren
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Syntaxprüfung (python3 -m py_compile)
+        run: |
+          python -m py_compile main.py sms_gateway.py ogn_receiver.py
+
+      - name: PyInstaller Build (OverWatchMK2.app)
+        run: pyinstaller --clean --noconfirm OverWatchMK2.spec
+
+      - name: Release-Paket zusammenstellen
+        run: |
+          mkdir -p release_macos
+          cp -R dist/OverWatchMK2.app release_macos/
+          cp config.yaml release_macos/
+          cp README.md release_macos/
+          cp ANLEITUNG.md release_macos/
+          cp CHANGELOG.md release_macos/
+          mkdir -p release_macos/offline_map
+          touch release_macos/offline_map/HIER_MBTILES_DATEI_ABLEGEN.txt
+          # macOS-Downloads/Artefakt-Uploads erhalten .app-Bundles nur
+          # zuverlässig, wenn sie vorher gezippt werden (sonst gehen
+          # Ausführungsrechte/Bundle-Struktur beim Hoch-/Herunterladen
+          # verloren) -- daher zusätzlich als ZIP direkt neben das
+          # Verzeichnis gepackt.
+          cd release_macos && zip -r -y OverWatchMK2-macOS.zip . -x "OverWatchMK2-macOS.zip"
+
+      - name: Artefakt hochladen
+        uses: actions/upload-artifact@v4
+        with:
+          name: OverWatchMK2-macos
+          path: release_macos/OverWatchMK2-macOS.zip
+
+  release:
+    name: GitHub Release erstellen
+    needs: [ build-windows, build-macos ]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: OverWatchMK2-windows
+          path: artifacts/windows
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: OverWatchMK2-macos
+          path: artifacts/macos
+
+      - name: Windows-Ordner zippen
+        run: |
+          cd artifacts/windows
+          zip -r ../../OverWatchMK2-windows.zip .
+
+      - name: macOS-Zip an Ort und Stelle benennen
+        run: |
+          cp artifacts/macos/OverWatchMK2-macOS.zip ./OverWatchMK2-macos.zip
+
+      - name: GitHub Release veröffentlichen
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            OverWatchMK2-windows.zip
+            OverWatchMK2-macos.zip
+          generate_release_notes: true

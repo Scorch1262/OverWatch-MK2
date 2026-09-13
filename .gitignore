@@ -1,0 +1,55 @@
+# OverWatchMK2 – Git Ignore
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+pip-wheel-metadata/
+
+# PyInstaller
+*.spec.bak
+*.manifest
+
+# Virtual Environments
+venv/
+.venv/
+env/
+.env/
+ENV/
+
+# Laufzeit-/persistente Daten (liegen normalerweise NICHT im Repo, sondern
+# neben der fertigen exe/.app -- werden hier trotzdem vorsorglich ignoriert,
+# falls versehentlich im Projektordner entwickelt/getestet wird)
+*.log
+overwatchmk2.log*
+overwatchmk2_crash.log
+config.local.yaml
+sms_tracks.json
+sms_format.json
+map_annotations.json
+starlink_tle_cache.json
+offline_map/*.mbtiles
+
+# IDE / OS
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# UPX (wird im CI heruntergeladen)
+upx.exe
+upx/
+upx_dir/
+upx.zip
+
+*.bak
+*.tmp

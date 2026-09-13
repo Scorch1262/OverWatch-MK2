@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OverWatchMK2</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='vendor/leaflet.css') }}?v=1">
+<script src="{{ url_for('static', filename='vendor/leaflet.js') }}?v=1"></script>
+<script src="{{ url_for('static', filename='vendor/socket.io.js') }}?v=1"></script>
+<style>
+:root {
+  --c0:#04080e; --c1:#080f1a; --c2:#0c1524; --c3:#111d2e; --c4:#162440;
+  --border:#1a2e48; --acc:#0ea5e9; --acc2:#38bdf8;
+  --gn:#16a34a; --gn2:#22c55e; --rd:#dc2626; --rd2:#ef4444;
+  --am:#d97706; --am2:#f59e0b; --pu2:#a78bfa;
+  --tx0:#e8f1fc; --tx1:#94b3d0; --tx2:#4e6d8a;
+  --mono:'Consolas','SFMono-Regular',monospace;
+  --sans:system-ui,-apple-system,'Segoe UI',sans-serif;
+  --pw:360px; --hh:50px;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;overflow:hidden;background:var(--c0);color:var(--tx0);
+  font-family:var(--sans);font-size:12px;-webkit-font-smoothing:antialiased;}
+::-webkit-scrollbar{width:4px;} ::-webkit-scrollbar-track{background:var(--c0);}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+
+#header{position:fixed;top:0;left:0;right:0;height:var(--hh);background:var(--c1);
+  border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 14px;
+  gap:14px;z-index:1000;}
+#left-panel{position:fixed;top:var(--hh);left:0;bottom:0;width:var(--pw);background:var(--c1);
+  border-right:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto;z-index:900;}
+#map-wrap{position:fixed;top:var(--hh);left:var(--pw);right:0;bottom:0;z-index:100;}
+#map{width:100%;height:100%;background:#0a1220;}
+
+.hlogo{display:flex;flex-direction:column;flex-shrink:0;}
+.hlogo-name{font-family:var(--mono);font-size:14px;font-weight:700;letter-spacing:.08em;color:var(--tx0);}
+.hlogo-sub{font-family:var(--mono);font-size:8px;color:var(--acc2);letter-spacing:.15em;
+  text-transform:uppercase;margin-top:1px;}
+.hsearch{flex:1;display:flex;gap:6px;max-width:480px;}
+.hsearch input{flex:1;background:var(--c2);border:1px solid var(--border);border-radius:3px;
+  color:var(--tx0);padding:6px 10px;font-size:12px;font-family:var(--sans);}
+.hsearch input:focus{outline:none;border-color:var(--acc);}
+.hbtn{background:var(--c2);border:1px solid var(--border);color:var(--tx1);border-radius:3px;
+  padding:6px 12px;font-size:11px;cursor:pointer;transition:.15s;}
+.hbtn:hover{border-color:var(--acc);color:var(--tx0);}
+.hver{margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--tx2);}
+
+.section{border-bottom:1px solid var(--border);padding:12px 14px;}
+.section h3{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--tx2);
+  margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;}
+.layer-row{display:flex;align-items:center;gap:8px;padding:6px 0;font-size:12px;}
+.layer-row input[type=checkbox]{accent-color:var(--acc);width:14px;height:14px;cursor:pointer;}
+.layer-row label{flex:1;cursor:pointer;}
+.status-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;background:var(--tx2);}
+.status-dot.ok{background:var(--gn2);box-shadow:0 0 6px var(--gn2);}
+.status-dot.err{background:var(--rd2);}
+.status-dot.wait{background:var(--am2);animation:blink 1.5s infinite;}
+.status-note{font-size:10px;color:var(--tx2);margin-left:15px;margin-top:-4px;margin-bottom:4px;
+  word-break:break-word;}
+.count-badge{font-family:var(--mono);font-size:10px;color:var(--acc2);background:var(--c3);
+  border-radius:8px;padding:1px 7px;}
+
+.btn{background:var(--c3);border:1px solid var(--border);color:var(--tx0);border-radius:4px;
+  padding:7px 10px;font-size:11px;cursor:pointer;width:100%;transition:.15s;}
+.btn:hover{border-color:var(--acc);}
+.btn.primary{background:var(--acc);border-color:var(--acc);color:#04101c;font-weight:600;}
+.btn.primary:hover{background:var(--acc2);}
+.btn.danger{border-color:var(--rd);color:var(--rd2);}
+.btn.small{width:auto;padding:4px 8px;font-size:10px;}
+
+.sender-item{display:flex;align-items:center;gap:8px;padding:6px 0;font-size:11px;}
+.sender-swatch{width:11px;height:11px;border-radius:50%;flex-shrink:0;}
+.sender-num{font-family:var(--mono);flex:1;}
+.sender-count{color:var(--tx2);}
+
+.inbox-item{border-left:2px solid var(--border);padding:6px 8px;margin-bottom:6px;font-size:11px;
+  background:var(--c2);border-radius:0 3px 3px 0;}
+.inbox-item.parsed{border-left-color:var(--gn2);}
+.inbox-item.unparsed{border-left-color:var(--am2);}
+.inbox-item .meta{color:var(--tx2);font-size:10px;margin-bottom:3px;}
+.inbox-item .text{font-family:var(--mono);white-space:pre-wrap;word-break:break-word;}
+.inbox-item .use-btn{margin-top:5px;}
+
+textarea, select, input[type=text]{width:100%;background:var(--c2);border:1px solid var(--border);
+  border-radius:3px;color:var(--tx0);padding:6px 8px;font-size:11px;font-family:var(--sans);}
+textarea{font-family:var(--mono);resize:vertical;min-height:60px;}
+label.small-label{display:block;font-size:10px;color:var(--tx2);margin:8px 0 3px;}
+
+.modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:2000;display:none;
+  align-items:center;justify-content:center;}
+.modal-backdrop.open{display:flex;}
+.modal{background:var(--c1);border:1px solid var(--border);border-radius:8px;width:480px;
+  max-width:92vw;max-height:85vh;overflow-y:auto;padding:18px;}
+.modal h2{font-size:14px;margin-bottom:12px;}
+.candidate{border:1px solid var(--border);border-radius:4px;padding:8px 10px;margin:8px 0;
+  cursor:pointer;transition:.15s;}
+.candidate:hover{border-color:var(--acc);}
+.candidate .cand-label{font-size:11px;font-weight:600;margin-bottom:3px;}
+.candidate .cand-val{font-family:var(--mono);font-size:11px;color:var(--acc2);}
+.close-x{float:right;cursor:pointer;color:var(--tx2);font-size:16px;line-height:1;}
+
+.leaflet-popup-content-wrapper{background:var(--c1);color:var(--tx0);border-radius:4px;}
+.leaflet-popup-tip{background:var(--c1);}
+.leaflet-popup-content{font-size:11px;font-family:var(--sans);}
+</style>
+</head>
+<body>
+
+<div id="header">
+  <div class="hlogo">
+    <div class="hlogo-name">OVERWATCH MK2</div>
+    <div class="hlogo-sub">Online Air &amp; SMS Tracking</div>
+  </div>
+  <div class="hsearch">
+    <input type="text" id="search-input" placeholder="Koordinaten oder Adresse eingeben und Enter drücken...">
+    <button class="hbtn" onclick="doSearch()">Suchen</button>
+  </div>
+  <div class="hver" title="{{ dw_build_note }}">v{{ dw_version }} · {{ local_ip }}:{{ port }}</div>
+</div>
+
+<div id="left-panel">
+
+  <div class="section">
+    <h3>Kartenebenen</h3>
+    <div class="layer-row"><input type="checkbox" id="chk-adsb" checked>
+      <label for="chk-adsb">ADS-B (Flugzeuge)</label>
+      <span class="count-badge" id="cnt-adsb">0</span></div>
+    <div class="status-note"><span class="status-dot" id="dot-adsb"></span> <span id="txt-adsb">wartet...</span></div>
+
+    <div class="layer-row"><input type="checkbox" id="chk-flarm" checked>
+      <label for="chk-flarm">FLARM/OGN (Segelflieger)</label>
+      <span class="count-badge" id="cnt-flarm">0</span></div>
+    <div class="status-note"><span class="status-dot" id="dot-flarm"></span> <span id="txt-flarm">wartet...</span></div>
+
+    <div class="layer-row"><input type="checkbox" id="chk-starlink">
+      <label for="chk-starlink">Starlink-Satelliten</label>
+      <span class="count-badge" id="cnt-starlink">0</span></div>
+    <div class="status-note"><span class="status-dot" id="dot-starlink"></span> <span id="txt-starlink">wartet...</span></div>
+
+    <div class="layer-row"><input type="checkbox" id="chk-sms" checked>
+      <label for="chk-sms">SMS-Ortung</label>
+      <span class="count-badge" id="cnt-sms">0</span></div>
+    <div class="status-note"><span class="status-dot" id="dot-sms"></span> <span id="txt-sms">deaktiviert</span></div>
+
+    <div class="layer-row"><input type="checkbox" id="chk-noflyzones">
+      <label for="chk-noflyzones">No-Fly-Zonen (dipul)</label></div>
+
+    <div class="layer-row"><input type="checkbox" id="chk-offline">
+      <label for="chk-offline">Offline-Karte statt Online</label></div>
+    <div class="status-note" id="txt-offline">prüfe...</div>
+  </div>
+
+  <div class="section">
+    <h3>SMS-Ortung <button class="btn small" onclick="openLearnModal()">Format anlernen</button></h3>
+    <div class="status-note" id="sms-format-info">Kein Format angelernt -- automatische Erkennung aktiv.</div>
+    <div id="sender-list" style="margin-top:8px;"></div>
+    <button class="btn" style="margin-top:8px;" onclick="toggleInbox()">Empfangene SMS anzeigen</button>
+    <div id="inbox-list" style="display:none;margin-top:8px;max-height:260px;overflow-y:auto;"></div>
+  </div>
+
+  <div class="section">
+    <h3>Kartenmarkierungen</h3>
+    <button class="btn" onclick="startAddMarker()">Marker hinzufügen</button>
+    <div id="annotation-list" style="margin-top:8px;"></div>
+  </div>
+
+</div>
+
+<div id="map-wrap"><div id="map"></div></div>
+
+<!-- ── SMS-Format-Anlern-Dialog ────────────────────────────────── -->
+<div class="modal-backdrop" id="learn-modal">
+  <div class="modal">
+    <span class="close-x" onclick="closeLearnModal()">&times;</span>
+    <h2>SMS-Koordinatenformat anlernen</h2>
+    <p style="font-size:11px;color:var(--tx1);margin-bottom:10px;">
+      Füge den Text einer Beispiel-SMS deines Trackers ein (oder wähle unten
+      eine bereits empfangene Nachricht). OverWatchMK2 versucht automatisch,
+      die enthaltenen Koordinaten zu erkennen -- bestätige anschließend den
+      richtigen Treffer, damit künftige Nachrichten in diesem Format sofort
+      und eindeutig eingezeichnet werden.
+    </p>
+    <label class="small-label">Beispieltext</label>
+    <textarea id="learn-text" placeholder="z.B.: Standort: 52.5200,13.4050 oder lat:52.52 lon:13.40"></textarea>
+    <button class="btn primary" style="margin-top:10px;" onclick="runLearnTest()">Erkennung testen</button>
+
+    <div id="learn-candidates" style="margin-top:10px;"></div>
+
+    <label class="small-label">Fortgeschritten: eigene Regex (optional)</label>
+    <input type="text" id="learn-custom-regex" placeholder="(?P<lat>-?\d+\.\d+)\D+(?P<lon>-?\d+\.\d+)">
+
+    <div style="margin-top:14px;border-top:1px solid var(--border);padding-top:10px;">
+      <button class="btn danger" onclick="resetLearnedFormat()">Angelerntes Format zurücksetzen</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const socket = io();
+const MAP_CFG = {{ map_cfg | tojson }};
+
+const map = L.map('map', {zoomControl:false}).setView([MAP_CFG.default_lat, MAP_CFG.default_lon], MAP_CFG.default_zoom);
+L.control.zoom({position:'bottomright'}).addTo(map);
+
+const onlineTiles = L.tileLayer(MAP_CFG.tile_url, {maxZoom:19, attribution:'&copy; OpenStreetMap'}).addTo(map);
+const offlineTiles = L.tileLayer('/api/offline_tiles/{z}/{x}/{y}.png', {maxZoom:19, attribution:'Offline-Karte'});
+
+let noFlyLayer = null;
+fetch('/api/noflyzones/config').then(r=>r.json()).then(cfg=>{
+  if (cfg.enabled && cfg.wms_url) {
+    noFlyLayer = L.tileLayer.wms(cfg.wms_url, {layers:cfg.layers, version:cfg.wms_version,
+      transparent:true, format:'image/png', attribution:cfg.attribution});
+    document.getElementById('chk-noflyzones').onchange = e => {
+      if (e.target.checked) noFlyLayer.addTo(map); else map.removeLayer(noFlyLayer);
+    };
+  }
+});
+
+fetch('/api/offline_tiles/status').then(r=>r.json()).then(s=>{
+  const el = document.getElementById('txt-offline');
+  if (s.available) { el.textContent = 'Offline-Kacheln gefunden: ' + s.path; }
+  else { el.textContent = 'Keine .mbtiles-Datei neben der exe gefunden.'; }
+});
+document.getElementById('chk-offline').onchange = e => {
+  if (e.target.checked) { map.removeLayer(onlineTiles); offlineTiles.addTo(map); }
+  else { map.removeLayer(offlineTiles); onlineTiles.addTo(map); }
+};
+
+// ── Marker-Layer je Datenquelle ─────────────────────────────────
+const adsbLayer = L.layerGroup().addTo(map);
+const flarmLayer = L.layerGroup().addTo(map);
+const starlinkLayer = L.layerGroup();
+const smsLayer = L.layerGroup().addTo(map);
+const annotationLayer = L.layerGroup().addTo(map);
+
+document.getElementById('chk-adsb').onchange = e => e.target.checked ? adsbLayer.addTo(map) : map.removeLayer(adsbLayer);
+document.getElementById('chk-flarm').onchange = e => e.target.checked ? flarmLayer.addTo(map) : map.removeLayer(flarmLayer);
+document.getElementById('chk-starlink').onchange = e => e.target.checked ? starlinkLayer.addTo(map) : map.removeLayer(starlinkLayer);
+document.getElementById('chk-sms').onchange = e => e.target.checked ? smsLayer.addTo(map) : map.removeLayer(smsLayer);
+
+function planeIcon(color){
+  return L.divIcon({className:'', html:`<div style="width:9px;height:9px;background:${color};
+    border-radius:2px;transform:rotate(45deg);box-shadow:0 0 4px ${color};"></div>`, iconSize:[9,9]});
+}
+function dotIcon(color, size){
+  size = size || 9;
+  return L.divIcon({className:'', html:`<div style="width:${size}px;height:${size}px;background:${color};
+    border-radius:50%;border:1px solid #04101c;box-shadow:0 0 5px ${color};"></div>`,
+    iconSize:[size,size]});
+}
+
+function renderAdsb(list){
+  adsbLayer.clearLayers();
+  document.getElementById('cnt-adsb').textContent = list.length;
+  list.forEach(a=>{
+    if (a.lat==null||a.lon==null) return;
+    const m = L.marker([a.lat,a.lon], {icon:planeIcon('#38bdf8')}).addTo(adsbLayer);
+    m.bindPopup(`<b>${a.callsign||a.icao||'?'}</b><br>ICAO: ${a.icao}<br>
+      Höhe: ${a.alt_m||'?'} m<br>Geschw.: ${a.speed_kmh||'?'} km/h<br>Quelle: ${a.source||''}`);
+  });
+}
+function renderFlarm(list){
+  flarmLayer.clearLayers();
+  document.getElementById('cnt-flarm').textContent = list.length;
+  list.forEach(a=>{
+    if (a.lat==null||a.lon==null) return;
+    const m = L.marker([a.lat,a.lon], {icon:dotIcon('#a3e635',8)}).addTo(flarmLayer);
+    m.bindPopup(`<b>${a.ogn_id||'?'}</b><br>Typ: ${a.aircraft_type||'?'}<br>
+      Höhe: ${a.alt_m!=null?a.alt_m+' m':'?'}<br>Kurs: ${a.course_deg||'?'}°`);
+  });
+}
+function renderStarlink(list){
+  starlinkLayer.clearLayers();
+  document.getElementById('cnt-starlink').textContent = list.length;
+  list.forEach(s=>{
+    const m = L.marker([s.lat,s.lon], {icon:dotIcon('#c084fc',6)}).addTo(starlinkLayer);
+    m.bindPopup(`<b>${s.name}</b><br>NORAD: ${s.norad_id}<br>Höhe: ${s.alt_km} km<br>
+      Geschw.: ${s.speed_kmh} km/h`);
+    (s.ground_track||[]).forEach(seg=>{
+      L.polyline(seg, {color:'#c084fc', weight:1, opacity:.5, dashArray:'2,4'}).addTo(starlinkLayer);
+    });
+  });
+}
+
+// ── SMS-Punktketten ──────────────────────────────────────────────
+let smsTracks = {};
+function renderSmsTracks(tracks){
+  smsTracks = tracks;
+  smsLayer.clearLayers();
+  let total = 0;
+  const senderListEl = document.getElementById('sender-list');
+  senderListEl.innerHTML = '';
+  Object.values(tracks).forEach(track=>{
+    const pts = track.points || [];
+    total += pts.length;
+    const latlngs = pts.map(p=>[p.lat,p.lon]);
+    if (latlngs.length>1){
+      L.polyline(latlngs, {color:track.color, weight:2, opacity:.85}).addTo(smsLayer);
+    }
+    pts.forEach((p,i)=>{
+      const isLast = i===pts.length-1;
+      const m = L.marker([p.lat,p.lon], {icon:dotIcon(track.color, isLast?12:7)}).addTo(smsLayer);
+      m.bindPopup(`<b>${track.sender}</b><br>${p.received_at? new Date(p.received_at).toLocaleString('de-DE'):''}<br>
+        ${p.confirmed?'✓ angelerntes Format':'⚠ automatisch erkannt'} (${p.pattern_label||''})<br>
+        <span style="font-family:monospace;font-size:10px;">${(p.raw_text||'').replace(/</g,'&lt;')}</span>`);
+    });
+    const row = document.createElement('div');
+    row.className = 'sender-item';
+    row.innerHTML = `<span class="sender-swatch" style="background:${track.color}"></span>
+      <span class="sender-num">${track.sender}</span>
+      <span class="sender-count">${pts.length} Pkt.</span>
+      <button class="btn small danger" title="Punktkette löschen">✕</button>`;
+    row.querySelector('button').onclick = ()=>{
+      if(confirm('Punktkette für '+track.sender+' wirklich löschen?')){
+        fetch('/api/sms/tracks/'+encodeURIComponent(track.sender), {method:'DELETE'})
+          .then(()=>refreshSmsTracks());
+      }
+    };
+    senderListEl.appendChild(row);
+  });
+  document.getElementById('cnt-sms').textContent = total;
+}
+function refreshSmsTracks(){ fetch('/api/sms/tracks').then(r=>r.json()).then(renderSmsTracks); }
+refreshSmsTracks();
+
+function refreshSmsFormat(){
+  fetch('/api/sms/format').then(r=>r.json()).then(f=>{
+    const el = document.getElementById('sms-format-info');
+    if (f.pattern_id) el.textContent = 'Angelernt: ' + f.label + ' (seit ' + new Date(f.trained_at).toLocaleDateString('de-DE') + ')';
+    else el.textContent = 'Kein Format angelernt -- automatische Erkennung aktiv.';
+  });
+}
+refreshSmsFormat();
+
+function refreshSmsStatus(){
+  fetch('/api/sms/status').then(r=>r.json()).then(s=>{
+    const dot = document.getElementById('dot-sms'), txt = document.getElementById('txt-sms');
+    if (!s.enabled){ dot.className='status-dot'; txt.textContent='deaktiviert (config.yaml: sms.enabled)'; return; }
+    if (s.connected){ dot.className='status-dot ok'; txt.textContent = s.messages_with_coords+' von '+s.messages_received+' SMS mit Koordinaten'; }
+    else { dot.className='status-dot err'; txt.textContent = s.last_error || 'nicht verbunden'; }
+  });
+}
+refreshSmsStatus();
+setInterval(refreshSmsStatus, 5000);
+
+// ── Anlern-Dialog ────────────────────────────────────────────────
+function openLearnModal(){ document.getElementById('learn-modal').classList.add('open'); }
+function closeLearnModal(){ document.getElementById('learn-modal').classList.remove('open'); }
+
+function runLearnTest(){
+  const text = document.getElementById('learn-text').value.trim();
+  const customRegex = document.getElementById('learn-custom-regex').value.trim();
+  if (!text) return;
+  fetch('/api/sms/learn', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({sample_text:text, custom_regex:customRegex})})
+    .then(r=>r.json()).then(res=>{
+      const box = document.getElementById('learn-candidates');
+      box.innerHTML = '';
+      if (!res.ok){ box.innerHTML = '<p style="color:var(--rd2)">'+res.error+'</p>'; return; }
+      if (!res.candidates.length){ box.innerHTML = '<p style="color:var(--am2)">Kein Muster hat einen Treffer gefunden.</p>'; return; }
+      res.candidates.forEach(c=>{
+        const div = document.createElement('div');
+        div.className = 'candidate';
+        div.innerHTML = `<div class="cand-label">${c.label}</div>
+          <div class="cand-val">Lat: ${c.lat}  Lon: ${c.lon}</div>
+          <div style="font-size:10px;color:var(--tx2);margin-top:3px;">Treffer: "${c.matched_text}"</div>`;
+        div.onclick = ()=>confirmLearn(c, text);
+        box.appendChild(div);
+      });
+    });
+}
+
+function confirmLearn(candidate, exampleText){
+  fetch('/api/sms/learn/confirm', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({pattern_id:candidate.pattern_id, label:candidate.label,
+                          example_text:exampleText, custom_regex:candidate.custom_regex||null})})
+    .then(r=>r.json()).then(()=>{ closeLearnModal(); refreshSmsFormat(); });
+}
+
+function resetLearnedFormat(){
+  if (!confirm('Angelerntes Format wirklich zurücksetzen?')) return;
+  fetch('/api/sms/format', {method:'DELETE'}).then(()=>{ refreshSmsFormat(); closeLearnModal(); });
+}
+
+// ── Inbox (letzte empfangene SMS, zum Anlernen nutzbar) ──────────
+function toggleInbox(){
+  const el = document.getElementById('inbox-list');
+  if (el.style.display==='none'){ el.style.display='block'; refreshInbox(); }
+  else el.style.display='none';
+}
+function refreshInbox(){
+  fetch('/api/sms/inbox').then(r=>r.json()).then(list=>{
+    const el = document.getElementById('inbox-list');
+    el.innerHTML = '';
+    if (!list.length){ el.innerHTML = '<p style="font-size:10px;color:var(--tx2)">Noch keine SMS empfangen.</p>'; return; }
+    list.forEach(m=>{
+      const div = document.createElement('div');
+      div.className = 'inbox-item ' + (m.parsed?'parsed':'unparsed');
+      div.innerHTML = `<div class="meta">${m.sender} · ${m.timestamp||''}</div>
+        <div class="text">${(m.text||'').replace(/</g,'&lt;')}</div>
+        <button class="btn small use-btn">Als Beispiel für Anlernen nutzen</button>`;
+      div.querySelector('button').onclick = ()=>{
+        document.getElementById('learn-text').value = m.text;
+        openLearnModal();
+      };
+      el.appendChild(div);
+    });
+  });
+}
+
+// ── Kartenmarkierungen ────────────────────────────────────────────
+let addingMarker = false;
+function startAddMarker(){
+  addingMarker = true;
+  alert('Klicke auf die Karte, um einen Marker zu platzieren.');
+}
+map.on('click', e=>{
+  if (!addingMarker) return;
+  addingMarker = false;
+  const label = prompt('Beschriftung für diesen Marker (optional):', '') || '';
+  const color = '#38bdf8';
+  fetch('/api/annotations', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({type:'marker', color:color, label:label,
+                          geometry:{lat:e.latlng.lat, lon:e.latlng.lng}})})
+    .then(r=>r.json());
+});
+function renderAnnotations(list){
+  annotationLayer.clearLayers();
+  const el = document.getElementById('annotation-list');
+  el.innerHTML = '';
+  list.forEach(a=>{
+    if (a.type==='marker'){
+      L.marker([a.geometry.lat, a.geometry.lon], {icon:dotIcon(a.color,10)})
+        .bindPopup(a.label||'Markierung').addTo(annotationLayer);
+    }
+    const row = document.createElement('div');
+    row.className = 'sender-item';
+    row.innerHTML = `<span class="sender-swatch" style="background:${a.color}"></span>
+      <span class="sender-num">${a.label||'(ohne Beschriftung)'}</span>
+      <button class="btn small danger">✕</button>`;
+    row.querySelector('button').onclick = ()=>{
+      fetch('/api/annotations/'+a.id, {method:'DELETE'}).then(()=>refreshAnnotations());
+    };
+    el.appendChild(row);
+  });
+}
+function refreshAnnotations(){ fetch('/api/annotations').then(r=>r.json()).then(renderAnnotations); }
+refreshAnnotations();
+
+// ── Suche (Koordinaten oder Adresse) ─────────────────────────────
+function parseCoordinates(text){
+  const m = text.match(/(-?\d{1,3}\.\d+)[,;\s]+(-?\d{1,3}\.\d+)/);
+  if (m) return {lat:parseFloat(m[1]), lon:parseFloat(m[2])};
+  return null;
+}
+function doSearch(){
+  const text = document.getElementById('search-input').value.trim();
+  if (!text) return;
+  const coords = parseCoordinates(text);
+  if (coords){ map.setView([coords.lat, coords.lon], 13); return; }
+  fetch('/api/geocode?q='+encodeURIComponent(text)).then(r=>r.json()).then(res=>{
+    if (res.ok) map.setView([res.lat, res.lon], 14);
+    else alert(res.error || 'Keine Ergebnisse.');
+  });
+}
+document.getElementById('search-input').addEventListener('keydown', e=>{ if(e.key==='Enter') doSearch(); });
+
+// ── Viewport-Updates an den Server (für ADS-B/Starlink-Umkreis) ──
+function reportViewport(){
+  const c = map.getCenter();
+  const b = map.getBounds();
+  fetch('/api/viewport', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({lat:c.lat, lon:c.lng,
+      radius_km: c.distanceTo(b.getNorthEast())/1000,
+      bbox: {lamin:b.getSouth(), lamax:b.getNorth(), lomin:b.getWest(), lomax:b.getEast()}})});
+}
+map.on('moveend', reportViewport);
+reportViewport();
+
+// ── WebSocket-Updates ─────────────────────────────────────────────
+function applyStatus(prefix, status, extraText){
+  const dot = document.getElementById('dot-'+prefix), txt = document.getElementById('txt-'+prefix);
+  if (!dot) return;
+  if (status.active && status.last_success_ts) { dot.className='status-dot ok'; }
+  else if (status.active) { dot.className='status-dot wait'; }
+  else { dot.className='status-dot'; }
+  txt.textContent = extraText || (status.last_error || (status.active ? 'aktiv' : 'deaktiviert'));
+}
+
+socket.on('full_update', data=>{
+  if (data.adsb) renderAdsb(data.adsb);
+  if (data.adsb_status) applyStatus('adsb', data.adsb_status);
+  if (data.flarm) renderFlarm(data.flarm);
+  if (data.flarm_status) applyStatus('flarm', data.flarm_status);
+  if (data.starlink) renderStarlink(data.starlink);
+  if (data.starlink_status) applyStatus('starlink', data.starlink_status,
+    data.starlink_status.satellite_count ? data.starlink_status.satellite_count+' Bahnelemente geladen' : null);
+  if (data.sms_tracks) renderSmsTracks(data.sms_tracks);
+  if (data.sms_format) refreshSmsFormat();
+  if (data.annotations) renderAnnotations(data.annotations);
+});
+
+socket.on('sms_point', data=>{
+  refreshSmsTracks();
+  if (document.getElementById('inbox-list').style.display!=='none') refreshInbox();
+});
+
+socket.on('annotations_update', renderAnnotations);
+</script>
+</body>
+</html>

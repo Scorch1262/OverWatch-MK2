@@ -1,0 +1,39 @@
+# OverWatchMK2 – Python-Abhängigkeiten
+# Installieren: pip install -r requirements.txt
+
+# ── Web-Framework ────────────────────────────────────────────────
+flask==3.0.3
+flask-socketio==5.3.6
+
+# ── WebSocket Transport ──────────────────────────────────────────
+simple-websocket==1.1.0
+
+# ── HTTP Client (ADS-B/FLARM/Starlink/Geocoding-APIs) ────────────
+requests==2.32.3
+
+# ── Satelliten-Bahnberechnung (Starlink-Tracker) ──────────────────
+# Enthält eine kompilierte C-Erweiterung für schnelle SGP4-Propagation.
+sgp4==2.27
+
+# ── SMS-Ortungsempfang (USB-UART-Modem, z.B. SIM800) ─────────────
+pyserial==3.5
+
+# ── Konfiguration ────────────────────────────────────────────────
+pyyaml==6.0.2
+
+# ── Automatisch installierte Abhängigkeiten (explizit gepinnt) ───
+blinker==1.8.2
+bidict==0.23.1
+certifi==2024.8.30
+charset-normalizer==3.3.2
+click==8.1.7
+h11==0.14.0
+idna==3.10
+itsdangerous==2.2.0
+jinja2==3.1.4
+markupsafe==2.1.5
+python-engineio==4.9.1
+python-socketio==5.11.3
+urllib3==2.2.3
+werkzeug==3.0.4
+wsproto==1.2.0
