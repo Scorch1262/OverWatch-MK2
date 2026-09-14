@@ -18,8 +18,8 @@ angeschlossenes GSM-Modem (SIM800/900/7600-kompatibel), siehe
 sms_gateway.py.
 """
 
-OVERWATCH_VERSION = "1.0.1"
-OVERWATCH_BUILD_NOTE = "fix-macos-build-arch-and-exec-permissions"
+OVERWATCH_VERSION = "1.0.2"
+OVERWATCH_BUILD_NOTE = "fix-macos-silent-stdout-crash-and-arm64-only-workflow"
 
 import sys, os, json, time, math, socket, logging, threading, sqlite3
 import argparse, platform, traceback, requests, uuid
@@ -55,6 +55,43 @@ def _external_dir() -> str:
             return os.path.dirname(app_bundle_dir)
         return os.path.dirname(exe_path)
     return os.path.dirname(os.path.abspath(__file__))
+
+
+# ── macOS-Fix (v1.0.2): sys.stdout/sys.stderr können None sein ───────
+# Wenn OverWatchMK2.app per Doppelklick im Finder gestartet wird
+# (statt aus dem Terminal heraus), hängt macOS dem Prozess KEIN
+# kontrollierendes Terminal an -- sys.stdout und sys.stderr sind dann
+# in einer PyInstaller-.app schlicht None. JEDER print()-Aufruf würde
+# in diesem Fall sofort mit "AttributeError: 'NoneType' object has no
+# attribute 'write'" abstürzen -- und zwar BEVOR sys.excepthook (siehe
+# unten) diesen Fehler sinnvoll behandeln kann, da der Crash-Handler
+# selbst ebenfalls print() nutzt und dann seinerseits abstürzt. Das
+# sichtbare Symptom ist exakt das gemeldete Verhalten: das Dock-Symbol
+# hüpft kurz (Prozess startet), verschwindet dann sofort wieder ohne
+# jede Fehlermeldung (Prozess stirbt lautlos beim allerersten print()).
+# Fix: fehlende Streams werden hier, VOR dem ersten print() im
+# gesamten Programm, durch eine Log-Datei neben der exe/.app ersetzt
+# -- dieselbe Diagnoseausgabe, die bei einem Terminal-Start ohnehin
+# sichtbar wäre, landet so wenigstens in einer nachträglich
+# einsehbaren Datei.
+if sys.stdout is None or sys.stderr is None:
+    try:
+        _console_log_path = os.path.join(_external_dir(), "overwatchmk2_console.log")
+        _console_stream = open(_console_log_path, "a", buffering=1, encoding="utf-8")
+        if sys.stdout is None:
+            sys.stdout = _console_stream
+        if sys.stderr is None:
+            sys.stderr = _console_stream
+    except Exception:
+        # Selbst das Öffnen einer Log-Datei kann in seltenen Fällen
+        # fehlschlagen (z.B. fehlende Schreibrechte im Ordner) -- dann
+        # wenigstens auf ein In-Memory-Objekt ausweichen, damit print()
+        # nicht crasht, auch wenn die Ausgabe dabei verloren geht.
+        import io
+        if sys.stdout is None:
+            sys.stdout = io.StringIO()
+        if sys.stderr is None:
+            sys.stderr = io.StringIO()
 
 
 def _crash_handler(exc_type, exc_value, exc_tb):

@@ -1,5 +1,151 @@
 # OverWatchMK2 – Changelog
 
+## [1.0.2] – Fix: macOS-App stürzte beim Finder-Start lautlos ab; CI hing bei nicht mehr existierendem Intel-Runner
+
+### Problem (Nutzermeldung, zwei getrennte Symptome)
+
+1. Der GitHub-Actions-Workflow blieb im Job `build-macos` (Ziel-Label
+   `macos-13`) dauerhaft bei "Waiting for a runner to pick up this
+   job" hängen -- niemals fertig, niemals fehlgeschlagen, einfach
+   endlos wartend.
+2. `OverWatchMK2.app` ließ sich weiterhin nicht starten -- diesmal mit
+   genauerer Beschreibung: nach Erteilen der Datenschutzfreigabe (macOS
+   Gatekeeper "Trotzdem öffnen" über Systemeinstellungen) hüpft das
+   Dock-Icon kurz auf und verschwindet dann wieder, OHNE dass ein
+   Fenster oder eine Fehlermeldung erscheint.
+
+Zusätzliche Nutzeranforderung: Es soll ab sofort NUR NOCH eine
+Mac-App für Apple Silicon (M1 und neuer) gebaut werden, keine
+Intel/x86_64-Variante mehr (die in [1.0.1] eingeführte
+Intel/arm64-Matrix wird damit wieder zurückgebaut).
+
+### Ursache 1: CI hängt (macos-13-Runner existiert nicht mehr)
+
+GitHub hat das gehostete Runner-Image `macos-13` inzwischen aus dem
+Angebot genommen (Intel-Mac-Runner werden von GitHub schrittweise
+abgekündigt/entfernt). Ein Workflow, der `runs-on: macos-13` anfordert,
+bekommt dafür nie eine Maschine zugewiesen -- er hängt unbegrenzt in
+"Waiting for a runner to pick up this job", statt mit einer klaren
+Fehlermeldung abzubrechen. Das war KEIN Bug im eigentlichen Sinne,
+sondern eine mit [1.0.1] eingeführte Abhängigkeit von einem
+mittlerweile nicht mehr verfügbaren Runner-Label.
+
+### Ursache 2: sys.stdout/sys.stderr sind None bei Finder-Start
+
+Das war der eigentliche, seit [1.0.0] bestehende Bug. Wird eine
+PyInstaller-`.app` per Doppelklick im Finder gestartet (statt aus dem
+Terminal heraus), hängt macOS dem Prozess KEIN kontrollierendes
+Terminal an -- `sys.stdout` und `sys.stderr` sind in genau diesem Fall
+schlicht `None`. `main.py` ruft aber bereits ganz am Anfang (noch vor
+`main()`, direkt beim Modulimport) mehrfach `print()` auf, u.a. beim
+Laden der `config.yaml` ("`[DIAG] Config geladen: ...`"). Ein
+`print()`-Aufruf auf `None` wirft sofort
+`AttributeError: 'NoneType' object has no attribute 'write'`. Diese
+Exception hätte durch den bereits vorhandenen `sys.excepthook`
+(`_crash_handler`) abgefangen werden können -- ABER `_crash_handler`
+selbst nutzt ebenfalls `print()`, um die Fehlermeldung auszugeben, und
+stürzt beim Versuch, den Fehler zu melden, exakt am selben Problem
+ein zweites Mal ab. Ergebnis: Python fällt auf sein eingebautes
+Notfallverhalten zurück (Fehlermeldung nach stderr, das ebenfalls
+`None` ist -> schlägt lautlos fehl) und der Prozess beendet sich
+kommentarlos. Das erklärt exakt das gemeldete Symptom (Dock-Icon
+hüpft, Programm verschwindet, keinerlei Meldung) UND warum in dieser
+Linux-Entwicklungsumgebung (wo `sys.stdout` beim Testen immer
+vorhanden war) nichts davon auffiel -- der Fehler tritt ausschließlich
+beim GUI-Start ohne Terminal auf, nie bei einem manuellen
+Terminal-Start und nie in der hiesigen Testumgebung.
+
+### Änderungen
+
+- **`main.py`:** direkt nach der Definition von `_external_dir()` (also
+  bevor IRGENDEIN `print()` im Programm ausgeführt wird) wird jetzt
+  geprüft, ob `sys.stdout`/`sys.stderr` `None` sind; falls ja, werden
+  sie durch eine neu geöffnete Log-Datei `overwatchmk2_console.log`
+  NEBEN der exe/.app ersetzt (mit Fallback auf ein reines
+  In-Memory-`io.StringIO()`, falls selbst das Öffnen der Datei
+  fehlschlägt, z.B. mangels Schreibrechten). Die komplette bisherige
+  Diagnoseausgabe (Versionsnummer, geladene Config, externer
+  Ordner, ...) bleibt dadurch beim Finder-Start erhalten, statt
+  ersatzlos zu verschwinden -- einsehbar in genau dieser Datei.
+  `OVERWATCH_VERSION` auf `1.0.2`, `OVERWATCH_BUILD_NOTE` auf
+  `"fix-macos-silent-stdout-crash-and-arm64-only-workflow"` gesetzt.
+- **`.github/workflows/build.yml`:** Job `build-macos` von der in
+  [1.0.1] eingeführten Intel/arm64-Matrix zurückgebaut auf einen
+  einzelnen Job mit `runs-on: macos-14` (Apple Silicon/arm64) --
+  entsprechend der Nutzeranforderung, nur noch Apple-Silicon-Macs zu
+  unterstützen. `macos-13` kommt im gesamten Workflow nicht mehr vor.
+  Der Ausführungsrechte-/Quarantäne-Prüfschritt aus [1.0.1] bleibt
+  erhalten (ergänzt um `file <binary>` zur Architektur-Diagnose in der
+  Job-Log-Ausgabe). Der `release`-Job lädt entsprechend wieder nur
+  EIN macOS-Artefakt (`OverWatchMK2-macos`) statt zweier.
+- **`OverWatchMK2.spec`:** `CFBundleShortVersionString` auf `1.0.2`
+  aktualisiert.
+- **`ANLEITUNG.md`:** Abschnitt 1 (Schnellstart) wieder auf einen
+  einzelnen macOS-Download zurückgestellt, mit Hinweis, dass bewusst
+  nur Apple Silicon unterstützt wird. Abschnitt 7 (Fehlersuche)
+  überarbeitet: der bisherige Architektur-Prüfschritt entfällt (nicht
+  mehr relevant, da nur noch eine Architektur gebaut wird), dafür
+  neuer Hinweis auf `overwatchmk2_console.log` als erste Anlaufstelle
+  bei genau diesem "Icon hüpft, Programm verschwindet"-Symptom.
+
+### Verifikation
+
+```
+$ python3 -m py_compile main.py sms_gateway.py ogn_receiver.py
+(keine Ausgabe = Erfolg)
+
+$ python3 -c "import yaml; yaml.safe_load(open('.github/workflows/build.yml')); print('YAML OK')"
+YAML OK
+
+$ python3 main.py --version
+OverWatchMK2 1.0.2 (fix-macos-silent-stdout-crash-and-arm64-only-workflow)
+
+# Gezielter Test GENAU des behobenen Absturzszenarios: sys.stdout/
+# sys.stderr vor dem Import auf None gesetzt (simuliert exakt die
+# Situation eines Finder-Doppelklick-Starts ohne Terminal):
+$ python3 -c "
+import sys
+sys.stdout = None
+sys.stderr = None
+import main   # <- stürzte VOR diesem Fix hier sofort mit
+              #    AttributeError ab; nach dem Fix läuft der Import
+              #    sauber durch
+print('IMPORT OHNE ABSTURZ ERFOLGREICH', file=sys.__stdout__)
+print('main.OVERWATCH_VERSION =', main.OVERWATCH_VERSION, file=sys.__stdout__)
+"
+IMPORT OHNE ABSTURZ ERFOLGREICH
+main.OVERWATCH_VERSION = 1.0.2
+
+$ cat overwatchmk2_console.log
+[DIAG] Config geladen: /pfad/zu/config.yaml
+# -> bestätigt: die Diagnoseausgabe, die vorher spurlos verschwand
+#    (weil print() abstürzte, bevor sie irgendwo ankam), landet jetzt
+#    zuverlässig in dieser Datei statt verloren zu gehen
+```
+
+Dieser Reproduktionstest bildet den entscheidenden Unterschied zu
+[1.0.0]/[1.0.1] exakt ab: dort wurde nur mit normal vorhandenem
+`sys.stdout` getestet (Terminal-Start bzw. diese
+Linux-Entwicklungsumgebung), wodurch der eigentliche Fehler unentdeckt
+blieb, obwohl der Code bereits produktiv ausgeliefert war. Ein echter
+PyInstaller-Build unter macOS UND ein echter Finder-Doppelklick-Start
+auf einem physischen Mac konnten weiterhin nicht in dieser
+Linux-Entwicklungsumgebung durchgeführt werden -- das reproduzierte
+`sys.stdout=None`-Verhalten deckt jedoch nachweislich exakt den
+Mechanismus ab, den Apples GUI-Prozessstart (kein kontrollierendes
+Terminal) laut offizieller Python-/PyInstaller-Dokumentation für
+genau diesen Fall vorschreibt.
+
+### Offene Punkte
+
+Sollte nach diesem Update `overwatchmk2_console.log` neben der `.app`
+weiterhin fehlen ODER leer bleiben, ist das ein Hinweis darauf, dass
+der Absturz an einer anderen, noch nicht identifizierten Stelle
+auftritt -- dann bitte Inhalt von `overwatchmk2_crash.log` (falls
+vorhanden) bzw. die Ausgabe von
+`./OverWatchMK2.app/Contents/MacOS/OverWatchMK2` im Terminal
+mitteilen (siehe ANLEITUNG.md Abschnitt 7, Schritt 3).
+
 ## [1.0.1] – Fix: macOS-.app startete nicht (Architektur + Ausführungsrecht)
 
 ### Problem (Nutzermeldung)
