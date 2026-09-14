@@ -2,7 +2,7 @@ name: Build OverWatchMK2 (Windows exe + macOS app)
 
 # Läuft bei jedem Push auf main (reiner Build-/Rauchtest, kein Release)
 # UND bei jedem Push eines Versions-Tags (z.B. "v1.0.0") -- dann wird
-# zusätzlich ein GitHub Release mit beiden fertigen Artefakten angelegt.
+# zusätzlich ein GitHub Release mit allen fertigen Artefakten angelegt.
 # Auch manuell auslösbar über "Run workflow" im Actions-Tab.
 on:
   push:
@@ -59,8 +59,27 @@ jobs:
           path: release_windows/
 
   build-macos:
-    name: macOS .app
-    runs-on: macos-latest
+    name: macOS .app (${{ matrix.arch_label }})
+    strategy:
+      fail-fast: false
+      matrix:
+        # WICHTIG: "macos-latest" läuft inzwischen auf Apple-Silicon-
+        # (arm64-)Runnern -- ein dort gebautes PyInstaller-Bundle ist
+        # NICHT universal und startet auf einem Intel-Mac gar nicht
+        # (typisches Symptom: die .app lässt sich scheinbar "nicht
+        # öffnen", ohne hilfreiche Fehlermeldung -- "bad CPU type in
+        # executable"). Deshalb wird hier explizit auf BEIDEN
+        # Architekturen gebaut, statt sich auf "macos-latest" zu
+        # verlassen: macos-13 (letzter von GitHub bereitgestellter
+        # Intel/x86_64-Runner) UND macos-14 (Apple Silicon/arm64).
+        include:
+          - os: macos-13
+            arch_label: intel-x86_64
+            artifact_suffix: intel
+          - os: macos-14
+            arch_label: apple-silicon-arm64
+            artifact_suffix: arm64
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
@@ -79,8 +98,25 @@ jobs:
         run: |
           python -m py_compile main.py sms_gateway.py ogn_receiver.py
 
-      - name: PyInstaller Build (OverWatchMK2.app)
+      - name: PyInstaller Build (OverWatchMK2.app, ${{ matrix.arch_label }})
         run: pyinstaller --clean --noconfirm OverWatchMK2.spec
+
+      - name: Ausführungsrechte + Quarantäne-Attribut prüfen
+        run: |
+          # Sicherstellen, dass das eigentliche Binary in Contents/MacOS/
+          # ausführbar ist -- PyInstaller setzt das zwar selbst, aber
+          # nachfolgende Zip-/Artefakt-Schritte können das Bit unter
+          # Umständen verlieren, siehe bekannte Probleme mit
+          # actions/upload-artifact und Unix-Rechten. Direkt nach dem
+          # Bauen (also VOR jedem Zip-/Upload-Schritt) explizit setzen,
+          # damit es garantiert im Archiv landet.
+          chmod +x "dist/OverWatchMK2.app/Contents/MacOS/OverWatchMK2"
+          ls -la "dist/OverWatchMK2.app/Contents/MacOS/"
+          # com.apple.quarantine wird von GitHub-Runnern selbst nicht
+          # gesetzt (das passiert erst beim Herunterladen im Browser des
+          # Nutzers) -- hier trotzdem vorsorglich entfernen, falls doch
+          # vorhanden, schadet nicht.
+          xattr -cr "dist/OverWatchMK2.app" || true
 
       - name: Release-Paket zusammenstellen
         run: |
@@ -95,15 +131,16 @@ jobs:
           # macOS-Downloads/Artefakt-Uploads erhalten .app-Bundles nur
           # zuverlässig, wenn sie vorher gezippt werden (sonst gehen
           # Ausführungsrechte/Bundle-Struktur beim Hoch-/Herunterladen
-          # verloren) -- daher zusätzlich als ZIP direkt neben das
-          # Verzeichnis gepackt.
-          cd release_macos && zip -r -y OverWatchMK2-macOS.zip . -x "OverWatchMK2-macOS.zip"
+          # verloren) -- "zip -y" erhält zusätzlich Symlinks innerhalb
+          # des Bundles unverändert (PyInstaller/macOS-Frameworks nutzen
+          # davon einige).
+          cd release_macos && zip -r -y "OverWatchMK2-macOS-${{ matrix.artifact_suffix }}.zip" . -x "OverWatchMK2-macOS-*.zip"
 
       - name: Artefakt hochladen
         uses: actions/upload-artifact@v4
         with:
-          name: OverWatchMK2-macos
-          path: release_macos/OverWatchMK2-macOS.zip
+          name: OverWatchMK2-macos-${{ matrix.artifact_suffix }}
+          path: release_macos/OverWatchMK2-macOS-${{ matrix.artifact_suffix }}.zip
 
   release:
     name: GitHub Release erstellen
@@ -118,22 +155,29 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: OverWatchMK2-macos
-          path: artifacts/macos
+          name: OverWatchMK2-macos-intel
+          path: artifacts/macos-intel
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: OverWatchMK2-macos-arm64
+          path: artifacts/macos-arm64
 
       - name: Windows-Ordner zippen
         run: |
           cd artifacts/windows
           zip -r ../../OverWatchMK2-windows.zip .
 
-      - name: macOS-Zip an Ort und Stelle benennen
+      - name: macOS-Zips an Ort und Stelle benennen
         run: |
-          cp artifacts/macos/OverWatchMK2-macOS.zip ./OverWatchMK2-macos.zip
+          cp artifacts/macos-intel/OverWatchMK2-macOS-intel.zip ./OverWatchMK2-macos-intel.zip
+          cp artifacts/macos-arm64/OverWatchMK2-macOS-arm64.zip ./OverWatchMK2-macos-arm64.zip
 
       - name: GitHub Release veröffentlichen
         uses: softprops/action-gh-release@v2
         with:
           files: |
             OverWatchMK2-windows.zip
-            OverWatchMK2-macos.zip
+            OverWatchMK2-macos-intel.zip
+            OverWatchMK2-macos-arm64.zip
           generate_release_notes: true

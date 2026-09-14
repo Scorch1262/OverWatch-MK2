@@ -18,8 +18,8 @@ angeschlossenes GSM-Modem (SIM800/900/7600-kompatibel), siehe
 sms_gateway.py.
 """
 
-OVERWATCH_VERSION = "1.0.0"
-OVERWATCH_BUILD_NOTE = "initial-release-online-only-plus-sms-tracking"
+OVERWATCH_VERSION = "1.0.1"
+OVERWATCH_BUILD_NOTE = "fix-macos-build-arch-and-exec-permissions"
 
 import sys, os, json, time, math, socket, logging, threading, sqlite3
 import argparse, platform, traceback, requests, uuid

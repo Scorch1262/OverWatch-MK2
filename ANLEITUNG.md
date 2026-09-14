@@ -5,6 +5,12 @@
 1. Release-Zip von der [Releases-Seite](../../releases) herunterladen
    und an einen beliebigen Ort entpacken (z.B. `C:\OverWatchMK2\` oder
    `~/OverWatchMK2/`).
+   **macOS:** es gibt ZWEI separate Zips -- `OverWatchMK2-macos-intel.zip`
+   für Intel-Macs und `OverWatchMK2-macos-arm64.zip` für Apple-Silicon-
+   Macs (M1/M2/M3/M4). Welcher Chip verbaut ist, zeigt das Apple-Menü
+   -> "Über diesen Mac": steht dort "Apple M..." -> arm64-Variante,
+   steht dort "Intel" -> intel-Variante. Die falsche Variante lässt
+   sich NICHT starten (siehe Abschnitt 6).
 2. **Windows:** `OverWatchMK2.exe` doppelklicken. Ein Konsolenfenster
    öffnet sich und zeigt die Netzwerkadresse an.
 3. **macOS:** `OverWatchMK2.app` per Rechtsklick -> "Öffnen" starten
@@ -155,3 +161,42 @@ nicht verifiziert werden kann"). Abhilfe (nur beim ersten Start nötig):
 Rechtsklick auf `OverWatchMK2.app` -> "Öffnen" -> im Dialog erneut
 "Öffnen" bestätigen. Ab dann startet die App auch per normalem
 Doppelklick.
+
+## 7. macOS: "Die App startet einfach nicht" -- Fehlersuche
+
+Falls Rechtsklick -> "Öffnen" nichts bringt (kein Fenster, kein
+Terminal, das Dock-Symbol hüpft kurz und verschwindet wieder, oder es
+passiert optisch gar nichts), der Reihe nach prüfen:
+
+1. **Falsche Chip-Architektur geladen?** Das häufigste Problem. Ab
+   Version 1.0.1 gibt es zwei getrennte Downloads (Intel/arm64, siehe
+   Abschnitt 1) -- vorher gab es nur eine (Apple-Silicon-)Variante, die
+   auf Intel-Macs mit "Bad CPU type in executable" fehlschlägt, meist
+   OHNE sichtbaren Dialog. Prüfen mit:
+   ```
+   file OverWatchMK2.app/Contents/MacOS/OverWatchMK2
+   ```
+   Zeigt das Ergebnis `x86_64`, aber "Über diesen Mac" zeigt einen
+   Apple-M-Chip (oder umgekehrt) -- die andere Zip-Variante laden.
+2. **Ausführungsrecht fehlt.** Kommt vor, wenn das Zip nicht mit dem
+   normalen macOS-"Entpacken" (Doppelklick/Archivierungsprogramm)
+   sondern z.B. mit einem Cloud-Sync-Tool entpackt wurde. Prüfen/beheben:
+   ```
+   chmod +x OverWatchMK2.app/Contents/MacOS/OverWatchMK2
+   ```
+3. **Über das Terminal starten, um die echte Fehlermeldung zu sehen**
+   (ein Doppelklick über Finder zeigt bei einem Absturz oft gar keine
+   Meldung an):
+   ```
+   ./OverWatchMK2.app/Contents/MacOS/OverWatchMK2
+   ```
+   Das gibt entweder die normalen Start-Diagnosezeilen aus (dann läuft
+   es tatsächlich -- die Adresse steht in der Ausgabe) oder den
+   tatsächlichen Absturzgrund.
+4. **Crash-Log prüfen.** Falls das Programm zwar ausführbar ist aber
+   sofort abstürzt, legt es -- genau wie unter Windows -- eine
+   `overwatchmk2_crash.log` DIREKT NEBEN der `.app` ab (nicht im
+   Bundle). Zusätzlich lohnt ein Blick in Programm "Konsole.app" ->
+   "Absturzberichte" -> nach "OverWatchMK2" suchen.
+5. **Weiterhin kein Erfolg:** die Ausgabe aus Schritt 3 (bzw. den
+   Inhalt von `overwatchmk2_crash.log`) als GitHub Issue posten.

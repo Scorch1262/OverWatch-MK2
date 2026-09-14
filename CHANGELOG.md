@@ -1,5 +1,112 @@
 # OverWatchMK2 – Changelog
 
+## [1.0.1] – Fix: macOS-.app startete nicht (Architektur + Ausführungsrecht)
+
+### Problem (Nutzermeldung)
+
+Nach dem ersten Release funktionierte `OverWatchMK2.exe` unter Windows
+einwandfrei, `OverWatchMK2.app` unter macOS ließ sich jedoch nicht
+starten -- ohne vom Nutzer mitgeteilte genaue Fehlermeldung (Symptom
+zum Zeitpunkt dieses Fixes noch nicht abschließend eingegrenzt, siehe
+"Nicht abschließend verifiziert" unten).
+
+### Ursache
+
+Zwei unabhängige, beide plausible und beide durch dieses Release
+behobene Ursachen im GitHub-Actions-Workflow (`build.yml`), NICHT im
+main.py-Code selbst:
+
+1. **Architektur-Mismatch (wahrscheinlichste Ursache).** Der Job
+   `build-macos` lief bisher auf `runs-on: macos-latest`. GitHub hat
+   das zugrundeliegende Runner-Image für dieses Label inzwischen auf
+   Apple Silicon (arm64) umgestellt. Ein DORT mit PyInstaller gebautes
+   `.app`-Bundle enthält ausschließlich arm64-Maschinencode -- auf
+   einem Intel-Mac (x86_64) verweigert macOS den Start mit "Bad CPU
+   type in executable", in vielen Fällen ohne sichtbaren Dialog beim
+   Doppelklick über Finder (wirkt dann wie "es passiert einfach
+   nichts"). Das GitHub-Actions-Release enthielt bislang nur genau
+   EINE macOS-Variante -- welche Architektur das im Einzelfall war,
+   hing vom Zeitpunkt des Runner-Updates ab und war für den Nutzer
+   nicht ersichtlich.
+2. **Mögliches Verlieren des Ausführungsrechts beim Zip-/Artefakt-
+   Schritt.** `actions/upload-artifact` ist bekannt dafür, Unix-
+   Ausführungsrechte bei verschachtelten Bundle-Strukturen (wie einer
+   `.app`, die aus vielen einzelnen Dateien besteht) nicht in jedem
+   Fall zuverlässig zu erhalten. Das würde dazu führen, dass das
+   Programm zwar die richtige Architektur hat, aber trotzdem nicht
+   ausführbar ist ("Permission denied" bzw. bei Finder-Doppelklick
+   ebenfalls ein stiller Fehlschlag).
+
+### Änderungen
+
+- **`build-macos` läuft jetzt als Matrix-Job auf ZWEI expliziten
+  Runnern statt auf `macos-latest`:** `macos-13` (letzter von GitHub
+  bereitgestellter Intel/x86_64-Runner) UND `macos-14` (Apple
+  Silicon/arm64) -- baut also bei jedem Durchlauf zwei komplett
+  getrennte `.app`-Bundles, eines je Architektur. Kein "universal2"-
+  Binary (das würde eine deutlich komplexere Build-Pipeline mit
+  architekturübergreifendem `lipo`-Zusammenführen der Python-
+  Erweiterungen erfordern) -- stattdessen zwei separate, klar
+  benannte Downloads: `OverWatchMK2-macos-intel.zip` und
+  `OverWatchMK2-macos-arm64.zip`.
+- **Neuer Workflow-Schritt "Ausführungsrechte + Quarantäne-Attribut
+  prüfen"** direkt nach dem PyInstaller-Build (also VOR jedem
+  Zip-/Upload-Schritt): setzt `chmod +x` explizit auf
+  `Contents/MacOS/OverWatchMK2` und entfernt vorsorglich ein eventuell
+  vorhandenes `com.apple.quarantine`-Attribut (`xattr -cr`) -- Letzteres
+  betrifft zwar in der Praxis eher den Download-Schritt beim Nutzer
+  (siehe ANLEITUNG.md Abschnitt 6 zu Gatekeeper), schadet an dieser
+  Stelle aber nicht und schließt diese Fehlerquelle sauber aus.
+- **`OverWatchMK2.spec`:** `CFBundleShortVersionString` von `1.0.0` auf
+  `1.0.1` aktualisiert (war zuvor hartkodiert unabhängig von
+  `OVERWATCH_VERSION` in main.py -- Diskrepanz behoben, wird ab jetzt
+  bei jedem Versionssprung mitgepflegt).
+- **`main.py`:** `OVERWATCH_VERSION` auf `1.0.1`,
+  `OVERWATCH_BUILD_NOTE` auf `"fix-macos-build-arch-and-exec-permissions"`
+  gesetzt.
+- **`release`-Job:** lädt jetzt drei statt zwei Artefakte herunter
+  (`OverWatchMK2-macos-intel`, `OverWatchMK2-macos-arm64` zusätzlich zu
+  `OverWatchMK2-windows`) und veröffentlicht entsprechend drei Dateien
+  im GitHub Release.
+- **`ANLEITUNG.md`:** neuer Abschnitt 7 "macOS: Die App startet einfach
+  nicht -- Fehlersuche" mit konkreten Prüfschritten (`file`-Befehl zur
+  Architekturprüfung, `chmod +x`, Start über Terminal statt Finder zum
+  Sichtbarmachen der echten Fehlermeldung, Crash-Log- und
+  Konsole.app-Hinweis). Abschnitt 1 (Schnellstart) weist jetzt explizit
+  auf die zwei getrennten macOS-Downloads hin.
+
+### Verifikation
+
+```
+$ python3 -m py_compile main.py sms_gateway.py ogn_receiver.py
+(keine Ausgabe = Erfolg)
+
+$ python3 -c "import yaml; yaml.safe_load(open('.github/workflows/build.yml')); print('YAML OK')"
+YAML OK
+
+$ python3 main.py --version
+OverWatchMK2 1.0.1 (fix-macos-build-arch-and-exec-permissions)
+```
+
+`OverWatchMK2.spec` enthält weiterhin dieselbe, bereits in [1.0.0]
+unveränderte `BUNDLE()`-Stufe -- diese Version ändert an der
+Spec-Logik selbst nichts außer der Versionsnummer im `info_plist`.
+
+### Nicht abschließend verifiziert / weiteres Vorgehen
+
+Der Nutzer hatte beim Melden dieses Fehlers noch KEINE genaue
+Fehlermeldung mitgeteilt (kein Dialogtext, keine Terminal-Ausgabe, kein
+Crash-Log-Inhalt) -- die oben beschriebenen zwei Ursachen sind die mit
+Abstand wahrscheinlichsten Erklärungen für "exe startet, .app startet
+nicht" bei einem über GitHub Actions gebauten, unsigniertem
+PyInstaller-`.app`-Bundle, konnten aber mangels vorhandener
+macOS-Hardware in dieser Entwicklungsumgebung nicht gegen einen
+tatsächlichen Fehlschlag verifiziert werden. Sollte das Problem nach
+diesem Update fortbestehen, sind die neuen Prüfschritte in
+ANLEITUNG.md Abschnitt 7 (insbesondere Start über Terminal statt
+Finder-Doppelklick) der nächste Schritt, um die tatsächliche
+Fehlermeldung sichtbar zu machen.
+
 ## [1.0.0] – Erstveröffentlichung: abgewandeltes Nachfolgeprojekt von OverWatchMK1
 
 ### Kontext / Auftrag
