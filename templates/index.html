@@ -7,506 +7,1943 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='vendor/leaflet.css') }}?v=1">
 <script src="{{ url_for('static', filename='vendor/leaflet.js') }}?v=1"></script>
 <script src="{{ url_for('static', filename='vendor/socket.io.js') }}?v=1"></script>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
+/* ── TOKENS (unverändert aus OverWatchMK1 übernommen) ── */
 :root {
   --c0:#04080e; --c1:#080f1a; --c2:#0c1524; --c3:#111d2e; --c4:#162440;
   --border:#1a2e48; --acc:#0ea5e9; --acc2:#38bdf8;
   --gn:#16a34a; --gn2:#22c55e; --rd:#dc2626; --rd2:#ef4444;
   --am:#d97706; --am2:#f59e0b; --pu2:#a78bfa;
   --tx0:#e8f1fc; --tx1:#94b3d0; --tx2:#4e6d8a;
-  --mono:'Consolas','SFMono-Regular',monospace;
-  --sans:system-ui,-apple-system,'Segoe UI',sans-serif;
-  --pw:360px; --hh:50px;
+  --mono:'IBM Plex Mono',monospace;
+  --sans:'IBM Plex Sans',system-ui,sans-serif;
+  --pw:380px; --hh:50px;
 }
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
-html,body{height:100%;overflow:hidden;background:var(--c0);color:var(--tx0);
-  font-family:var(--sans);font-size:12px;-webkit-font-smoothing:antialiased;}
-::-webkit-scrollbar{width:4px;} ::-webkit-scrollbar-track{background:var(--c0);}
-::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
-@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
 
-#header{position:fixed;top:0;left:0;right:0;height:var(--hh);background:var(--c1);
-  border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 14px;
-  gap:14px;z-index:1000;}
-#left-panel{position:fixed;top:var(--hh);left:0;bottom:0;width:var(--pw);background:var(--c1);
-  border-right:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto;z-index:900;}
-#map-wrap{position:fixed;top:var(--hh);left:var(--pw);right:0;bottom:0;z-index:100;}
-#map{width:100%;height:100%;background:#0a1220;}
+/* ── RESET ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; overflow: hidden; background: var(--c0); color: var(--tx0);
+  font-family: var(--sans); font-size: 12px; -webkit-font-smoothing: antialiased; }
+::-webkit-scrollbar { width: 3px; }
+::-webkit-scrollbar-track { background: var(--c0); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+@keyframes tin { from{transform:translateX(14px);opacity:0} to{transform:translateX(0);opacity:1} }
 
-.hlogo{display:flex;flex-direction:column;flex-shrink:0;}
-.hlogo-name{font-family:var(--mono);font-size:14px;font-weight:700;letter-spacing:.08em;color:var(--tx0);}
-.hlogo-sub{font-family:var(--mono);font-size:8px;color:var(--acc2);letter-spacing:.15em;
-  text-transform:uppercase;margin-top:1px;}
-.hsearch{flex:1;display:flex;gap:6px;max-width:480px;}
-.hsearch input{flex:1;background:var(--c2);border:1px solid var(--border);border-radius:3px;
-  color:var(--tx0);padding:6px 10px;font-size:12px;font-family:var(--sans);}
-.hsearch input:focus{outline:none;border-color:var(--acc);}
-.hbtn{background:var(--c2);border:1px solid var(--border);color:var(--tx1);border-radius:3px;
-  padding:6px 12px;font-size:11px;cursor:pointer;transition:.15s;}
-.hbtn:hover{border-color:var(--acc);color:var(--tx0);}
-.hver{margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--tx2);}
+#header {
+  position: fixed; top: 0; left: 0; right: 0; height: var(--hh);
+  background: var(--c1); border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; padding: 0 14px; gap: 14px;
+  z-index: 1000;
+}
+#header::after {
+  content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg,transparent,var(--acc),transparent);
+}
+#left-panel {
+  position: fixed; top: var(--hh); left: 0; bottom: 0; width: var(--pw);
+  background: var(--c1); border-right: 1px solid var(--border);
+  display: flex; flex-direction: column;
+  z-index: 900;
+}
+#map-wrap {
+  position: fixed; top: var(--hh); left: var(--pw); right: 0; bottom: 0;
+  z-index: 100;
+}
+#map { width: 100%; height: 100%; }
 
-.section{border-bottom:1px solid var(--border);padding:12px 14px;}
-.section h3{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--tx2);
-  margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;}
-.layer-row{display:flex;align-items:center;gap:8px;padding:6px 0;font-size:12px;}
-.layer-row input[type=checkbox]{accent-color:var(--acc);width:14px;height:14px;cursor:pointer;}
-.layer-row label{flex:1;cursor:pointer;}
-.status-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;background:var(--tx2);}
-.status-dot.ok{background:var(--gn2);box-shadow:0 0 6px var(--gn2);}
-.status-dot.err{background:var(--rd2);}
-.status-dot.wait{background:var(--am2);animation:blink 1.5s infinite;}
-.status-note{font-size:10px;color:var(--tx2);margin-left:15px;margin-top:-4px;margin-bottom:4px;
-  word-break:break-word;}
-.count-badge{font-family:var(--mono);font-size:10px;color:var(--acc2);background:var(--c3);
-  border-radius:8px;padding:1px 7px;}
+/* ── HEADER ELEMENTS ── */
+.hlogo { display: flex; align-items: center; gap: 9px; flex-shrink: 0; }
+.hlogo-name { font-family: var(--mono); font-size: 13px; font-weight: 700; letter-spacing: .1em; }
+.hlogo-sub { font-family: var(--mono); font-size: 7px; color: var(--tx2);
+  letter-spacing: .2em; text-transform: uppercase; margin-top: 1px; }
+.hlogo-ver { font-family: var(--mono); font-size: 8px; color: var(--acc2);
+  letter-spacing: .1em; margin-top: 2px; cursor: help; font-weight: 600; }
+.hdiv { width: 1px; height: 26px; background: var(--border); flex-shrink: 0; }
+.hstat { display: flex; flex-direction: column; gap: 1px; }
+.hstat-lbl { font-family: var(--mono); font-size: 7px; letter-spacing: .15em;
+  color: var(--tx2); text-transform: uppercase; }
+.hstat-val { font-family: var(--mono); font-size: 17px; font-weight: 700;
+  line-height: 1; color: var(--acc2); transition: color .3s; }
+.hstat-val.pu { color: var(--pu2); }
+.hstat-val.am { color: var(--am2); }
+.hstat-val.gn { color: var(--gn2); }
+.hbadges { display: flex; gap: 5px; }
+.badge { display: flex; align-items: center; gap: 4px; padding: 2px 8px;
+  background: var(--c2); border: 1px solid var(--border); border-radius: 2px;
+  font-family: var(--mono); font-size: 7px; letter-spacing: .1em;
+  color: var(--tx2); text-transform: uppercase; }
+.badge.on { border-color: var(--gn2); color: var(--gn2); }
+.badge.on::before { content: ''; width: 5px; height: 5px; background: var(--gn2);
+  border-radius: 50%; box-shadow: 0 0 6px var(--gn2); animation: blink 2s infinite; }
+.badge.err { border-color: var(--rd2); color: var(--rd2); cursor: help; }
+.badge.err::before { content: ''; width: 5px; height: 5px; background: var(--rd2);
+  border-radius: 50%; box-shadow: 0 0 6px var(--rd2); }
+.badge.off { border-color: var(--border); color: var(--tx2); }
+.badge.wait { border-color: var(--acc); color: var(--acc2); }
+.badge.wait::before { content: ''; width: 5px; height: 5px; background: var(--acc);
+  border-radius: 50%; box-shadow: 0 0 6px var(--acc); animation: blink 2s infinite; }
+.hsys { display: flex; align-items: center; gap: 6px; margin-left: auto; flex-shrink: 0; }
+.sdot { width: 7px; height: 7px; border-radius: 50%; background: var(--gn2);
+  box-shadow: 0 0 6px var(--gn2); animation: blink 2s infinite; }
+.sdot.off { background: var(--tx2); box-shadow: none; animation: none; }
+.sdot.err { background: var(--rd2); box-shadow: 0 0 6px var(--rd2); animation: none; }
+.stxt { font-family: var(--mono); font-size: 8px; letter-spacing: .15em;
+  color: var(--tx1); text-transform: uppercase; }
+#clock { font-family: var(--mono); font-size: 11px; color: var(--tx1); flex-shrink: 0; }
 
-.btn{background:var(--c3);border:1px solid var(--border);color:var(--tx0);border-radius:4px;
-  padding:7px 10px;font-size:11px;cursor:pointer;width:100%;transition:.15s;}
-.btn:hover{border-color:var(--acc);}
-.btn.primary{background:var(--acc);border-color:var(--acc);color:#04101c;font-weight:600;}
-.btn.primary:hover{background:var(--acc2);}
-.btn.danger{border-color:var(--rd);color:var(--rd2);}
-.btn.small{width:auto;padding:4px 8px;font-size:10px;}
+/* ── LEFT PANEL SECTIONS ── */
+.ph { padding: 10px 12px 8px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+.ph-title { font-family: var(--mono); font-size: 11px; letter-spacing: .2em;
+  color: var(--tx2); text-transform: uppercase; }
+.ph-cnt { font-family: var(--mono); font-size: 12px; color: var(--tx1); }
 
-.sender-item{display:flex;align-items:center;gap:8px;padding:6px 0;font-size:11px;}
-.sender-swatch{width:11px;height:11px;border-radius:50%;flex-shrink:0;}
-.sender-num{font-family:var(--mono);flex:1;}
-.sender-count{color:var(--tx2);}
+.tabs { display: flex; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.tab { flex: 1; padding: 9px 0; text-align: center; font-family: var(--mono);
+  font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--tx2);
+  background: none; border: none; cursor: pointer; border-bottom: 2px solid transparent;
+  transition: all .12s; }
+.tab:hover { color: var(--tx1); }
+.tab.active { color: var(--acc2); border-bottom-color: var(--acc); }
 
-.inbox-item{border-left:2px solid var(--border);padding:6px 8px;margin-bottom:6px;font-size:11px;
-  background:var(--c2);border-radius:0 3px 3px 0;}
-.inbox-item.parsed{border-left-color:var(--gn2);}
-.inbox-item.unparsed{border-left-color:var(--am2);}
-.inbox-item .meta{color:var(--tx2);font-size:10px;margin-bottom:3px;}
-.inbox-item .text{font-family:var(--mono);white-space:pre-wrap;word-break:break-word;}
-.inbox-item .use-btn{margin-top:5px;}
+#list-wrap { flex: 1; overflow-y: auto; min-height: 0; }
+#adsb-list, #starlink-list, #flarm-list, #sms-list { display: none; }
+#adsb-list.visible, #starlink-list.visible, #flarm-list.visible, #sms-list.visible { display: block; }
 
-textarea, select, input[type=text]{width:100%;background:var(--c2);border:1px solid var(--border);
-  border-radius:3px;color:var(--tx0);padding:6px 8px;font-size:11px;font-family:var(--sans);}
-textarea{font-family:var(--mono);resize:vertical;min-height:60px;}
-label.small-label{display:block;font-size:10px;color:var(--tx2);margin:8px 0 3px;}
+#detail { flex-shrink: 0; max-height: 320px; overflow-y: auto;
+  border-top: 1px solid var(--border); background: var(--c1); display: none; }
+#detail.vis { display: block; }
+.dh { position: sticky; top: 0; background: var(--c1); padding: 8px 12px 7px;
+  border-bottom: 1px solid var(--border); display: flex;
+  justify-content: space-between; align-items: center; z-index: 5; }
+.dh-id { font-family: var(--mono); font-size: 11px; color: var(--acc2);
+  letter-spacing: .04em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dh-x { background: none; border: 1px solid var(--border); color: var(--tx2);
+  width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;
+  cursor: pointer; font-size: 13px; border-radius: 2px; transition: all .12s; flex-shrink: 0; }
+.dh-x:hover { border-color: var(--rd2); color: var(--rd2); }
+.dsec { padding: 8px 12px; border-bottom: 1px solid rgba(26,46,72,.4); }
+.dsec-t { font-family: var(--mono); font-size: 10px; letter-spacing: .2em; color: var(--tx2);
+  text-transform: uppercase; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
+.dsec-t::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+.dgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px 10px; }
+.drow { display: flex; flex-direction: column; gap: 1px; }
+.drow.full { grid-column: 1 / -1; }
+.dk { font-family: var(--mono); font-size: 10px; letter-spacing: .08em;
+  color: var(--tx2); text-transform: uppercase; }
+.dv { font-family: var(--mono); font-size: 12px; color: var(--tx0); }
+.dv.hi { color: var(--acc2); } .dv.gn { color: var(--gn2); }
+.dv.am { color: var(--am2); } .dv.rd { color: var(--rd2); }
 
-.modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:2000;display:none;
-  align-items:center;justify-content:center;}
-.modal-backdrop.open{display:flex;}
-.modal{background:var(--c1);border:1px solid var(--border);border-radius:8px;width:480px;
-  max-width:92vw;max-height:85vh;overflow-y:auto;padding:18px;}
-.modal h2{font-size:14px;margin-bottom:12px;}
-.candidate{border:1px solid var(--border);border-radius:4px;padding:8px 10px;margin:8px 0;
-  cursor:pointer;transition:.15s;}
-.candidate:hover{border-color:var(--acc);}
-.candidate .cand-label{font-size:11px;font-weight:600;margin-bottom:3px;}
-.candidate .cand-val{font-family:var(--mono);font-size:11px;color:var(--acc2);}
-.close-x{float:right;cursor:pointer;color:var(--tx2);font-size:16px;line-height:1;}
+/* ── ADS-B LIST ITEMS ── */
+.ai { display: grid; grid-template-columns: 8px 1fr auto; gap: 8px;
+  align-items: start; padding: 8px 12px; cursor: pointer;
+  border-bottom: 1px solid rgba(26,46,72,.5); transition: background .12s;
+  position: relative; user-select: none; }
+.ai::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0;
+  width: 0; background: var(--am2); transition: width .12s; }
+.ai:hover { background: var(--c3); }
+.ai:hover::before { width: 2px; }
+.ai.sel { background: var(--c4); }
+.ai.sel::before { width: 3px; }
+.ai-dot { margin-top: 3px; width: 8px; height: 8px; border-radius: 2px;
+  background: var(--am); flex-shrink: 0; }
+.ai-info { overflow: hidden; }
+.ai-cs { font-family: var(--mono); font-size: 11px; color: var(--am2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 1px; }
+.ai-icao { font-family: var(--mono); font-size: 10px; color: var(--tx2); margin-bottom: 2px; }
+.ai-coord { font-family: var(--mono); font-size: 10px; color: var(--tx2); }
+.ai-ra { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex-shrink: 0; }
+.ai-alt { font-family: var(--mono); font-size: 13px; font-weight: 700; color: var(--tx0); }
+.ai-spd { font-family: var(--mono); font-size: 10px; color: var(--tx2); }
 
-.leaflet-popup-content-wrapper{background:var(--c1);color:var(--tx0);border-radius:4px;}
-.leaflet-popup-tip{background:var(--c1);}
-.leaflet-popup-content{font-size:11px;font-family:var(--sans);}
+/* Starlink Liste — violettes Farbschema */
+.si { display: grid; grid-template-columns: 8px 1fr auto; gap: 8px;
+  align-items: start; padding: 8px 12px; cursor: pointer;
+  border-bottom: 1px solid rgba(26,46,72,.5); transition: background .12s;
+  position: relative; user-select: none; }
+.si::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0;
+  width: 0; background: var(--pu2); transition: width .12s; }
+.si:hover { background: var(--c3); }
+.si:hover::before { width: 2px; }
+.si.sel { background: var(--c4); }
+.si.sel::before { width: 3px; }
+.si-dot { margin-top: 3px; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--pu2); flex-shrink: 0; box-shadow: 0 0 6px rgba(167,139,250,.6); }
+.si-info { overflow: hidden; }
+.si-name { font-family: var(--mono); font-size: 11px; color: var(--pu2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 1px; }
+.si-norad { font-family: var(--mono); font-size: 10px; color: var(--tx2); margin-bottom: 2px; }
+.si-coord { font-family: var(--mono); font-size: 10px; color: var(--tx2); }
+.si-ra { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex-shrink: 0; }
+.si-alt { font-family: var(--mono); font-size: 13px; font-weight: 700; color: var(--tx0); }
+.si-spd { font-family: var(--mono); font-size: 10px; color: var(--tx2); }
+
+.tag { font-family: var(--mono); font-size: 9px; letter-spacing: .08em;
+  text-transform: uppercase; padding: 1px 4px; border-radius: 2px; border: 1px solid; }
+.tag.tgray { color: var(--tx1); border-color: var(--border); background: var(--c2); }
+.tag.tgreen { color: var(--gn2); border-color: rgba(34,197,94,.4); background: rgba(34,197,94,.08); }
+.tag.tamber { color: var(--am2); border-color: rgba(245,158,11,.4); background: rgba(245,158,11,.08); }
+
+.empty { display: flex; align-items: center; justify-content: center;
+  height: 120px; font-family: var(--mono); font-size: 11px; text-align: center;
+  letter-spacing: .1em; text-transform: uppercase; color: var(--tx2); padding: 0 20px; }
+
+/* ── MAP OVERLAYS — dunkles Kartenthema (Original-Filterwerte) ── */
+.leaflet-tile { filter: brightness(.38) contrast(1.3) saturate(.5) hue-rotate(200deg); }
+.leaflet-container { background: #020509 !important; }
+.leaflet-control-zoom { border: 1px solid var(--border) !important; }
+.leaflet-control-zoom a { background: var(--c1) !important; color: var(--tx1) !important;
+  border-color: var(--border) !important; }
+.leaflet-control-zoom a:hover { background: var(--c3) !important; color: var(--acc2) !important; }
+.leaflet-popup-content-wrapper { background: var(--c3) !important;
+  border: 1px solid var(--acc) !important; border-radius: 2px !important;
+  color: var(--tx0) !important; box-shadow: 0 4px 20px rgba(0,0,0,.6) !important; }
+.leaflet-popup-tip { background: var(--acc) !important; }
+.lp-title { font-family: var(--mono); font-size: 11px; color: var(--acc2);
+  margin-bottom: 4px; font-weight: 700; }
+.lp-row { display: flex; justify-content: space-between; gap: 10px;
+  font-family: var(--mono); font-size: 11px; color: var(--tx1); padding: 1px 0; }
+.lp-v { color: var(--tx0); }
+.lp-btn { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--border); }
+.lp-btn button { width: 100%; background: rgba(14,165,233,.1);
+  border: 1px solid var(--acc); color: var(--acc2); font-family: var(--mono);
+  font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
+  padding: 4px 8px; cursor: pointer; border-radius: 2px; }
+
+.corner { position: absolute; z-index: 200; pointer-events: none;
+  width: 18px; height: 18px; border-color: var(--acc); border-style: solid; opacity: .4; }
+.ctlp { top:8px; left:8px; border-width:1px 0 0 1px; }
+.ctrp { top:8px; right:8px; border-width:1px 1px 0 0; }
+.cblp { bottom:8px; left:8px; border-width:0 0 1px 1px; }
+.cbrp { bottom:8px; right:8px; border-width:0 1px 1px 0; }
+
+.map-mode-badge { position: absolute; top: 8px; left: 50%; transform: translateX(-50%);
+  z-index: 500; padding: 3px 10px; border-radius: 2px; font-family: var(--mono);
+  font-size: 8px; letter-spacing: .1em; text-transform: uppercase;
+  background: var(--c2); border: 1px solid var(--am2); color: var(--am2); }
+.nfz-attribution { position: absolute; bottom: 4px; left: 8px; z-index: 500;
+  padding: 2px 8px; border-radius: 2px; font-family: var(--mono);
+  font-size: 8px; letter-spacing: .03em;
+  background: rgba(10,14,20,.72); border: 1px solid var(--border); color: var(--tx2); }
+
+#minfo { position: absolute; top: 10px; right: 10px; z-index: 400;
+  background: rgba(8,15,26,.9); border: 1px solid var(--border);
+  padding: 8px 11px; backdrop-filter: blur(8px); min-width: 130px; pointer-events: none; }
+.mi-row { display: flex; justify-content: space-between; gap: 14px; padding: 2px 0; }
+.mi-l { font-family: var(--mono); font-size: 10px; color: var(--tx2);
+  letter-spacing: .1em; text-transform: uppercase; }
+.mi-v { font-family: var(--mono); font-size: 11px; color: var(--tx0); }
+
+#mcoords { position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%);
+  z-index: 400; pointer-events: none; background: rgba(8,15,26,.85);
+  border: 1px solid var(--border); padding: 3px 12px; font-family: var(--mono);
+  font-size: 11px; color: var(--tx2); letter-spacing: .04em;
+  backdrop-filter: blur(4px); white-space: nowrap; }
+
+#locate-btn { position: absolute; top: 86px; left: 10px; z-index: 500;
+  width: 30px; height: 30px; display: flex; align-items: center; justify-content: center;
+  background: var(--c1); border: 2px solid rgba(0,0,0,.2); border-radius: 4px;
+  color: var(--tx1); cursor: pointer; transition: all .15s; pointer-events: all; }
+#locate-btn:hover { background: var(--c3); color: var(--acc2); }
+#locate-btn.locating #locate-icon { animation: locate-pulse 1s infinite; color: var(--acc2); }
+#locate-btn.located { color: var(--gn2); border-color: var(--gn2); }
+#locate-btn.error { color: var(--rd2); }
+@keyframes locate-pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+#geo-search { position: absolute; top: 124px; left: 10px; z-index: 500;
+  display: flex; pointer-events: all; }
+#geo-search-input { width: 150px; height: 30px; padding: 0 8px; font-size: 11px;
+  font-family: var(--mono); background: var(--c1); border: 2px solid rgba(0,0,0,.2);
+  border-right: none; border-radius: 4px 0 0 4px; color: var(--tx1); }
+#geo-search-input::placeholder { color: var(--tx2); }
+#geo-search-input:focus { outline: none; border-color: var(--acc2); }
+#geo-search-btn { width: 28px; height: 30px; display: flex; align-items: center;
+  justify-content: center; background: var(--c1); border: 2px solid rgba(0,0,0,.2);
+  border-radius: 0 4px 4px 0; color: var(--tx1); cursor: pointer; transition: all .15s; }
+#geo-search-btn:hover { background: var(--c3); color: var(--acc2); }
+#geo-search-btn.searching svg { animation: locate-pulse 1s infinite; color: var(--acc2); }
+
+#layer-toggle { position: absolute; bottom: 36px; right: 10px; z-index: 500;
+  display: flex; flex-direction: column; gap: 4px; }
+.ltbtn { padding: 4px 10px; background: rgba(8,15,26,.92);
+  border: 1px solid var(--border); color: var(--tx2); font-family: var(--mono);
+  font-size: 10px; letter-spacing: .1em; text-transform: uppercase;
+  cursor: pointer; border-radius: 2px; transition: all .12s;
+  pointer-events: all; text-align: center; }
+.ltbtn:hover, .ltbtn.on { background: rgba(14,165,233,.12);
+  border-color: var(--acc); color: var(--acc2); }
+
+#toasts { position: fixed; top: 58px; right: 10px; z-index: 9999;
+  display: flex; flex-direction: column; gap: 5px; pointer-events: none; }
+.toast { background: var(--c3); border: 1px solid var(--border);
+  border-left: 3px solid var(--acc); padding: 6px 12px; font-family: var(--mono);
+  font-size: 9px; color: var(--tx1); max-width: 260px;
+  animation: tin .2s ease; transition: opacity .3s; }
+.toast.tnew { border-left-color: var(--gn2); }
+.toast.tlost { border-left-color: var(--rd2); }
+
+/* Kartenmarkierungen: Werkzeugleiste (generisch, unverändert) */
+#annot-toolbar {
+  position: fixed; bottom: 16px; left: calc(var(--pw) + 16px); z-index: 950;
+  background: var(--c1); border: 1px solid var(--border); border-radius: 4px;
+  padding: 8px; display: flex; flex-direction: column; gap: 6px;
+  box-shadow: 0 4px 16px rgba(0,0,0,.4);
+}
+#annot-toolbar.collapsed .annot-body { display: none; }
+.annot-hdr { display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; cursor: pointer; user-select: none; }
+.annot-title { font-family: var(--mono); font-size: 10px; letter-spacing: .15em;
+  text-transform: uppercase; color: var(--tx2); }
+.annot-body { display: flex; flex-direction: column; gap: 8px; }
+.annot-tools { display: flex; gap: 5px; }
+.annot-tbtn { font-family: var(--mono); font-size: 10px; padding: 5px 9px;
+  background: transparent; border: 1px solid var(--border); border-radius: 3px;
+  color: var(--tx1); cursor: pointer; transition: all .12s; }
+.annot-tbtn:hover { border-color: var(--acc); color: var(--acc2); }
+.annot-tbtn.on { background: var(--acc); border-color: var(--acc); color: #04121e; font-weight: 700; }
+.annot-colors { display: flex; gap: 4px; }
+.annot-color { width: 18px; height: 18px; border-radius: 50%; cursor: pointer;
+  border: 2px solid transparent; transition: all .12s; }
+.annot-color.on { border-color: var(--tx0); transform: scale(1.15); }
+.annot-hint { font-family: var(--mono); font-size: 10px; color: var(--tx2);
+  max-width: 220px; line-height: 1.4; }
+.annot-cancel { font-family: var(--mono); font-size: 10px; padding: 4px 9px;
+  background: transparent; border: 1px solid var(--rd2); border-radius: 3px;
+  color: var(--rd2); cursor: pointer; align-self: flex-start; }
+.annot-cancel:hover { background: rgba(239,68,68,.12); }
+.annot-label-input { font-family: var(--mono); font-size: 10px;
+  background: var(--c3); border: 1px solid var(--border); border-radius: 3px;
+  color: var(--tx0); padding: 4px 6px; width: 100%; box-sizing: border-box; }
+.annot-popup-del { font-family: var(--mono); font-size: 10px; padding: 3px 8px;
+  background: rgba(239,68,68,.15); border: 1px solid var(--rd2); border-radius: 3px;
+  color: var(--rd2); cursor: pointer; margin-top: 4px; }
+.annot-popup-del:hover { background: rgba(239,68,68,.3); }
+
+/* ── SMS-Ortung ── */
+.smi { display: grid; grid-template-columns: 8px 1fr auto; gap: 8px;
+  align-items: start; padding: 8px 12px; cursor: pointer;
+  border-bottom: 1px solid rgba(26,46,72,.5); transition: background .12s;
+  position: relative; user-select: none; }
+.smi:hover { background: var(--c3); }
+.smi.sel { background: var(--c4); }
+.smi-dot { margin-top: 3px; width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.smi-info { overflow: hidden; }
+.smi-num { font-family: var(--mono); font-size: 11px; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; margin-bottom: 1px; }
+.smi-text { font-family: var(--mono); font-size: 10px; color: var(--tx2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 2px; }
+.smi-ra { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex-shrink: 0; }
+.smi-cnt { font-family: var(--mono); font-size: 13px; font-weight: 700; color: var(--tx0); }
+.smi-time { font-family: var(--mono); font-size: 10px; color: var(--tx2); }
+#sms-toolbar { padding: 8px 12px; border-bottom: 1px solid var(--border); display: flex; gap: 6px; }
+.sms-btn { flex: 1; font-family: var(--mono); font-size: 10px; padding: 6px 8px;
+  background: var(--c2); border: 1px solid var(--border); border-radius: 3px;
+  color: var(--tx1); cursor: pointer; transition: all .12s; text-align: center; }
+.sms-btn:hover { border-color: var(--acc); color: var(--acc2); }
+
+.modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.65); z-index: 3000;
+  display: none; align-items: center; justify-content: center; }
+.modal-backdrop.open { display: flex; }
+.modal { background: var(--c1); border: 1px solid var(--border); border-radius: 6px;
+  width: 480px; max-width: 92vw; max-height: 85vh; overflow-y: auto; padding: 16px; }
+.modal h2 { font-family: var(--mono); font-size: 12px; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--acc2); margin-bottom: 10px; }
+.modal p.hint { font-size: 11px; color: var(--tx1); margin-bottom: 10px; line-height: 1.5; }
+.modal textarea, .modal input[type=text] { width: 100%; background: var(--c2);
+  border: 1px solid var(--border); border-radius: 3px; color: var(--tx0);
+  padding: 7px 9px; font-size: 11px; font-family: var(--mono); }
+.modal textarea { min-height: 64px; resize: vertical; }
+.modal label.sl { display: block; font-family: var(--mono); font-size: 9px;
+  letter-spacing: .1em; text-transform: uppercase; color: var(--tx2); margin: 10px 0 4px; }
+.candidate { border: 1px solid var(--border); border-radius: 4px; padding: 8px 10px;
+  margin: 8px 0; cursor: pointer; transition: .12s; }
+.candidate:hover { border-color: var(--acc); background: var(--c3); }
+.candidate .cl { font-family: var(--mono); font-size: 11px; font-weight: 600; margin-bottom: 3px; color: var(--acc2); }
+.candidate .cv { font-family: var(--mono); font-size: 11px; color: var(--tx1); }
+.close-x { float: right; cursor: pointer; color: var(--tx2); font-size: 16px; line-height: 1; }
+.close-x:hover { color: var(--rd2); }
 </style>
 </head>
 <body>
 
+<!-- HEADER -->
 <div id="header">
   <div class="hlogo">
-    <div class="hlogo-name">OVERWATCH MK2</div>
-    <div class="hlogo-sub">Online Air &amp; SMS Tracking</div>
+    <svg width="26" height="26" viewBox="0 0 26 26" fill="none">
+      <polygon points="13,1 23,7 23,19 13,25 3,19 3,7" fill="none" stroke="#0ea5e9" stroke-width="1.4"/>
+      <circle cx="13" cy="13" r="3.5" fill="none" stroke="#38bdf8" stroke-width="1.1"/>
+      <circle cx="13" cy="13" r="1.2" fill="#38bdf8"/>
+      <line x1="13" y1="1" x2="13" y2="9.5" stroke="#0ea5e9" stroke-width=".7" opacity=".5"/>
+      <line x1="13" y1="16.5" x2="13" y2="25" stroke="#0ea5e9" stroke-width=".7" opacity=".5"/>
+      <line x1="3" y1="7" x2="9.5" y2="10.5" stroke="#0ea5e9" stroke-width=".7" opacity=".5"/>
+      <line x1="16.5" y1="15.5" x2="23" y2="19" stroke="#0ea5e9" stroke-width=".7" opacity=".5"/>
+      <line x1="23" y1="7" x2="16.5" y2="10.5" stroke="#0ea5e9" stroke-width=".7" opacity=".5"/>
+      <line x1="9.5" y1="15.5" x2="3" y2="19" stroke="#0ea5e9" stroke-width=".7" opacity=".5"/>
+    </svg>
+    <div>
+      <div class="hlogo-name">OVERWATCHMK2</div>
+      <div class="hlogo-sub">Online Air &amp; SMS Tracking</div>
+      <div class="hlogo-ver" title="{{ dw_build_note }}">v{{ dw_version }}</div>
+    </div>
   </div>
-  <div class="hsearch">
-    <input type="text" id="search-input" placeholder="Koordinaten oder Adresse eingeben und Enter drücken...">
-    <button class="hbtn" onclick="doSearch()">Suchen</button>
+  <div class="hdiv"></div>
+  <div class="hstat"><div class="hstat-lbl">ADS-B</div><div class="hstat-val am" id="s-adsb">0</div></div>
+  <div class="hstat"><div class="hstat-lbl">FLARM</div><div class="hstat-val" id="s-flarm" style="color:#eab308">0</div></div>
+  <div class="hstat"><div class="hstat-lbl">Starlink</div><div class="hstat-val pu" id="s-starlink">0</div></div>
+  <div class="hstat"><div class="hstat-lbl">SMS-Punkte</div><div class="hstat-val gn" id="s-sms">0</div></div>
+  <div class="hdiv"></div>
+  <div class="hbadges">
+    <div class="badge" id="badge-adsb" title="Noch keine Daten">ADS-B</div>
+    <div class="badge" id="badge-flarm" title="Noch keine Daten">FLARM</div>
+    <div class="badge" id="badge-starlink" title="Noch keine Daten">Starlink</div>
+    <div class="badge" id="badge-sms" title="Noch keine Daten">SMS</div>
   </div>
-  <div class="hver" title="{{ dw_build_note }}">v{{ dw_version }} · {{ local_ip }}:{{ port }}</div>
+  <div class="hsys"><div class="sdot" id="sys-dot"></div><div class="stxt" id="sys-txt">Verbinde...</div></div>
+  <div id="clock">--:--:--</div>
 </div>
 
+<!-- LEFT PANEL -->
 <div id="left-panel">
-
-  <div class="section">
-    <h3>Kartenebenen</h3>
-    <div class="layer-row"><input type="checkbox" id="chk-adsb" checked>
-      <label for="chk-adsb">ADS-B (Flugzeuge)</label>
-      <span class="count-badge" id="cnt-adsb">0</span></div>
-    <div class="status-note"><span class="status-dot" id="dot-adsb"></span> <span id="txt-adsb">wartet...</span></div>
-
-    <div class="layer-row"><input type="checkbox" id="chk-flarm" checked>
-      <label for="chk-flarm">FLARM/OGN (Segelflieger)</label>
-      <span class="count-badge" id="cnt-flarm">0</span></div>
-    <div class="status-note"><span class="status-dot" id="dot-flarm"></span> <span id="txt-flarm">wartet...</span></div>
-
-    <div class="layer-row"><input type="checkbox" id="chk-starlink">
-      <label for="chk-starlink">Starlink-Satelliten</label>
-      <span class="count-badge" id="cnt-starlink">0</span></div>
-    <div class="status-note"><span class="status-dot" id="dot-starlink"></span> <span id="txt-starlink">wartet...</span></div>
-
-    <div class="layer-row"><input type="checkbox" id="chk-sms" checked>
-      <label for="chk-sms">SMS-Ortung</label>
-      <span class="count-badge" id="cnt-sms">0</span></div>
-    <div class="status-note"><span class="status-dot" id="dot-sms"></span> <span id="txt-sms">deaktiviert</span></div>
-
-    <div class="layer-row"><input type="checkbox" id="chk-noflyzones">
-      <label for="chk-noflyzones">No-Fly-Zonen (dipul)</label></div>
-
-    <div class="layer-row"><input type="checkbox" id="chk-offline">
-      <label for="chk-offline">Offline-Karte statt Online</label></div>
-    <div class="status-note" id="txt-offline">prüfe...</div>
+  <div class="ph">
+    <div class="ph-title">Luftlage</div>
+    <div class="ph-cnt" id="list-cnt">0</div>
+  </div>
+  <div class="tabs">
+    <button class="tab active" id="tab-adsb-tab" onclick="switchTab('adsb')">ADS-B</button>
+    <button class="tab" id="tab-flarm-tab" onclick="switchTab('flarm')">FLARM</button>
+    <button class="tab" id="tab-starlink-tab" onclick="switchTab('starlink')">Starlink</button>
+    <button class="tab" id="tab-sms-tab" onclick="switchTab('sms')">SMS</button>
   </div>
 
-  <div class="section">
-    <h3>SMS-Ortung <button class="btn small" onclick="openLearnModal()">Format anlernen</button></h3>
-    <div class="status-note" id="sms-format-info">Kein Format angelernt -- automatische Erkennung aktiv.</div>
-    <div id="sender-list" style="margin-top:8px;"></div>
-    <button class="btn" style="margin-top:8px;" onclick="toggleInbox()">Empfangene SMS anzeigen</button>
-    <div id="inbox-list" style="display:none;margin-top:8px;max-height:260px;overflow-y:auto;"></div>
+  <div id="sms-toolbar" style="display:none;">
+    <button class="sms-btn" onclick="openLearnModal()">Format anlernen</button>
+    <button class="sms-btn" onclick="toggleInbox()">Empfangene SMS</button>
   </div>
 
-  <div class="section">
-    <h3>Kartenmarkierungen</h3>
-    <button class="btn" onclick="startAddMarker()">Marker hinzufügen</button>
-    <div id="annotation-list" style="margin-top:8px;"></div>
+  <div id="list-wrap">
+    <div id="adsb-list" class="visible"></div>
+    <div id="flarm-list"></div>
+    <div id="starlink-list"></div>
+    <div id="sms-list"></div>
   </div>
 
+  <div id="detail">
+    <div class="dh">
+      <div class="dh-id" id="d-hid">—</div>
+      <button class="dh-x" onclick="closeDetail()">&#x2715;</button>
+    </div>
+    <div id="d-body"></div>
+  </div>
 </div>
 
-<div id="map-wrap"><div id="map"></div></div>
+<!-- MAP -->
+<div id="map-wrap">
+  <div id="map"></div>
+  <div class="corner ctlp"></div>
+  <div class="corner ctrp"></div>
+  <div class="corner cblp"></div>
+  <div class="corner cbrp"></div>
+  <div id="minfo">
+    <div class="mi-row"><span class="mi-l">Zoom</span><span class="mi-v" id="m-zoom">{{ map_cfg.default_zoom }}</span></div>
+    <div class="mi-row"><span class="mi-l">Cursor</span><span class="mi-v" id="m-cursor">—</span></div>
+    <div class="mi-row"><span class="mi-l">Server</span><span class="mi-v">{{ local_ip }}:{{ port }}</span></div>
+  </div>
+  <div id="mcoords">N 00°00.000' E 000°00.000'</div>
+  <div id="map-mode-badge" class="map-mode-badge" style="display:none;"></div>
+  <div id="geo-search">
+    <input type="text" id="geo-search-input" placeholder="Koordinaten oder Adresse..."
+           title="Koordinaten funktionieren auch offline. Adress-/Straßensuche benötigt Internet."
+           onkeydown="if(event.key==='Enter') performGeoSearch();">
+    <button id="geo-search-btn" title="Suchen / Karte dorthin verschieben" onclick="performGeoSearch()">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+        <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/>
+        <line x1="16.5" y1="16.5" x2="21" y2="21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+    </button>
+  </div>
+  <button id="locate-btn" title="Zu meinem Standort springen" onclick="locateUser()">
+    <svg id="locate-icon" width="18" height="18" viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="3" fill="currentColor"/>
+      <path d="M12 2 L12 6 M12 18 L12 22 M2 12 L6 12 M18 12 L22 12"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    </svg>
+  </button>
+  <div id="layer-toggle">
+    <button class="ltbtn on" id="lt-adsb" onclick="toggleLayer('adsb')">&#9992; ADS-B</button>
+    <button class="ltbtn on" id="lt-flarm" onclick="toggleLayer('flarm')">&#9992; FLARM</button>
+    <button class="ltbtn on" id="lt-starlink" onclick="toggleLayer('starlink')">&#10022; Starlink</button>
+    <button class="ltbtn on" id="lt-sms" onclick="toggleLayer('sms')">&#9679; SMS-Ortung</button>
+    <button class="ltbtn" id="lt-noflyzones" onclick="toggleNoFlyZones()" title="Amtliche Geo-Zonen (dipul/DFS) – nur online verfügbar">&#9888; No-Fly-Zonen</button>
+  </div>
+  <div id="nfz-attribution" class="nfz-attribution" style="display:none;"></div>
+</div>
 
-<!-- ── SMS-Format-Anlern-Dialog ────────────────────────────────── -->
+<div id="toasts"></div>
+
+<!-- Kartenmarkierungen: Werkzeugleiste -->
+<div id="annot-toolbar">
+  <div class="annot-hdr" onclick="document.getElementById('annot-toolbar').classList.toggle('collapsed')">
+    <span class="annot-title">&#9998; Markierungen</span>
+    <span style="font-size:11px;color:var(--tx2)">&#9662;</span>
+  </div>
+  <div class="annot-body">
+    <div class="annot-tools">
+      <button class="annot-tbtn" id="annot-tool-marker" onclick="annotSetTool('marker')">&#128204; Marker</button>
+      <button class="annot-tbtn" id="annot-tool-circle" onclick="annotSetTool('circle')">&#9711; Kreis</button>
+      <button class="annot-tbtn" id="annot-tool-rectangle" onclick="annotSetTool('rectangle')">&#9633; Rechteck</button>
+      <button class="annot-tbtn" id="annot-tool-measure" onclick="annotSetTool('measure')">&#128207; Messen</button>
+    </div>
+    <div class="annot-colors" id="annot-colors"></div>
+    <input type="text" class="annot-label-input" id="annot-label-input" placeholder="Beschriftung (optional)" maxlength="200">
+    <div class="annot-hint" id="annot-hint">Werkzeug wählen, dann auf die Karte klicken.</div>
+    <button class="annot-cancel" id="annot-cancel-btn" onclick="annotCancel()" style="display:none">Abbrechen</button>
+  </div>
+</div>
+
+<!-- SMS-Format-Anlern-Dialog -->
 <div class="modal-backdrop" id="learn-modal">
   <div class="modal">
     <span class="close-x" onclick="closeLearnModal()">&times;</span>
     <h2>SMS-Koordinatenformat anlernen</h2>
-    <p style="font-size:11px;color:var(--tx1);margin-bottom:10px;">
-      Füge den Text einer Beispiel-SMS deines Trackers ein (oder wähle unten
-      eine bereits empfangene Nachricht). OverWatchMK2 versucht automatisch,
-      die enthaltenen Koordinaten zu erkennen -- bestätige anschließend den
-      richtigen Treffer, damit künftige Nachrichten in diesem Format sofort
-      und eindeutig eingezeichnet werden.
-    </p>
-    <label class="small-label">Beispieltext</label>
-    <textarea id="learn-text" placeholder="z.B.: Standort: 52.5200,13.4050 oder lat:52.52 lon:13.40"></textarea>
-    <button class="btn primary" style="margin-top:10px;" onclick="runLearnTest()">Erkennung testen</button>
-
-    <div id="learn-candidates" style="margin-top:10px;"></div>
-
-    <label class="small-label">Fortgeschritten: eigene Regex (optional)</label>
-    <input type="text" id="learn-custom-regex" placeholder="(?P<lat>-?\d+\.\d+)\D+(?P<lon>-?\d+\.\d+)">
-
-    <div style="margin-top:14px;border-top:1px solid var(--border);padding-top:10px;">
-      <button class="btn danger" onclick="resetLearnedFormat()">Angelerntes Format zurücksetzen</button>
+    <p class="hint">Beispieltext einer Ortungs-SMS einfügen (oder unten eine bereits
+      empfangene Nachricht wählen). Die Koordinaten-Erkennung schlägt passende
+      Formate vor -- den richtigen Treffer anklicken, um ihn für alle künftigen
+      Nachrichten zu übernehmen.</p>
+    <label class="sl">Beispieltext</label>
+    <textarea id="learn-text" placeholder="z.B.: Standort: 52.5200,13.4050"></textarea>
+    <button class="sms-btn" style="margin-top:8px;width:100%;" onclick="runLearnTest()">Erkennung testen</button>
+    <div id="learn-candidates"></div>
+    <label class="sl">Fortgeschritten: eigene Regex (optional)</label>
+    <input type="text" id="learn-custom-regex" placeholder="(?P&lt;lat&gt;-?\d+\.\d+)\D+(?P&lt;lon&gt;-?\d+\.\d+)">
+    <div style="margin-top:12px;border-top:1px solid var(--border);padding-top:10px;">
+      <button class="sms-btn" style="width:100%;border-color:var(--rd2);color:var(--rd2);" onclick="resetLearnedFormat()">Angelerntes Format zurücksetzen</button>
     </div>
   </div>
 </div>
 
+<!-- SMS-Inbox-Dialog -->
+<div class="modal-backdrop" id="inbox-modal">
+  <div class="modal">
+    <span class="close-x" onclick="closeInboxModal()">&times;</span>
+    <h2>Empfangene SMS</h2>
+    <div id="inbox-list"></div>
+  </div>
+</div>
+
 <script>
-const socket = io();
-const MAP_CFG = {{ map_cfg | tojson }};
+// ══════════════════════════════════════════════════════════
+// MAP INIT
+// ══════════════════════════════════════════════════════════
+const map = L.map('map', {
+  center: [{{ map_cfg.default_lat }}, {{ map_cfg.default_lon }}],
+  zoom: {{ map_cfg.default_zoom }},
+  zoomControl: true,
+  attributionControl: false
+});
+const onlineTileLayer = L.tileLayer(
+  {{ map_cfg.tile_url | tojson }}, { maxZoom: 19 }
+).addTo(map);
 
-const map = L.map('map', {zoomControl:false}).setView([MAP_CFG.default_lat, MAP_CFG.default_lon], MAP_CFG.default_zoom);
-L.control.zoom({position:'bottomright'}).addTo(map);
+const TILE_RETRY_MAX = 3;
+const TILE_RETRY_DELAY_MS = 700;
+function attachTileRetry(layer) {
+  layer.on('tileerror', (ev) => {
+    const tile = ev.tile;
+    if (!tile) return;
+    tile._retryCount = (tile._retryCount || 0) + 1;
+    if (tile._retryCount > TILE_RETRY_MAX) return;
+    const srcNow = tile.src;
+    setTimeout(() => {
+      if (tile.src === srcNow) { tile.src = ''; tile.src = srcNow; }
+    }, TILE_RETRY_DELAY_MS * tile._retryCount);
+  });
+}
+attachTileRetry(onlineTileLayer);
 
-const onlineTiles = L.tileLayer(MAP_CFG.tile_url, {maxZoom:19, attribution:'&copy; OpenStreetMap'}).addTo(map);
-const offlineTiles = L.tileLayer('/api/offline_tiles/{z}/{x}/{y}.png', {maxZoom:19, attribution:'Offline-Karte'});
+// ══════════════════════════════════════════════════════════
+// OFFLINE-KARTE (automatischer Fallback ohne Internetverbindung)
+// ══════════════════════════════════════════════════════════
+let offlineTileLayer = null;
+let offlineOutlineLayer = null;
+let usingOfflineMap = false;
+let mbtilesAvailable = null;
 
-let noFlyLayer = null;
-fetch('/api/noflyzones/config').then(r=>r.json()).then(cfg=>{
-  if (cfg.enabled && cfg.wms_url) {
-    noFlyLayer = L.tileLayer.wms(cfg.wms_url, {layers:cfg.layers, version:cfg.wms_version,
-      transparent:true, format:'image/png', attribution:cfg.attribution});
-    document.getElementById('chk-noflyzones').onchange = e => {
-      if (e.target.checked) noFlyLayer.addTo(map); else map.removeLayer(noFlyLayer);
-    };
+async function checkMbtilesAvailable() {
+  if (mbtilesAvailable !== null) return mbtilesAvailable;
+  try {
+    const res = await fetch('/api/offline_tiles/status');
+    const data = await res.json();
+    mbtilesAvailable = !!data.available;
+  } catch (e) { mbtilesAvailable = false; }
+  return mbtilesAvailable;
+}
+
+async function loadOfflineOutlineLayer() {
+  if (offlineOutlineLayer) return offlineOutlineLayer;
+  try {
+    const res = await fetch('/static/offline/germany_bundeslaender.geo.json');
+    const geo = await res.json();
+    offlineOutlineLayer = L.geoJSON(geo, {
+      style: { color: '#3a5a80', weight: 1, fillColor: '#0c1524', fillOpacity: 1 }
+    });
+  } catch (e) { console.warn('Offline-Umriss-Kartendaten konnten nicht geladen werden:', e); }
+  return offlineOutlineLayer;
+}
+
+function setMapModeBadge(mode) {
+  const badge = document.getElementById('map-mode-badge');
+  if (!badge) return;
+  if (mode === 'offline-full') {
+    badge.textContent = 'Offline-Karte (volle Detailtiefe, lokale Kacheln)';
+    badge.style.display = 'block';
+  } else if (mode === 'offline-outline') {
+    badge.textContent = 'Offline-Karte (nur Bundesländer-Umrisse)';
+    badge.style.display = 'block';
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
+async function switchToOfflineMap() {
+  if (usingOfflineMap) return;
+  usingOfflineMap = true;
+  if (onlineTileLayer && map.hasLayer(onlineTileLayer)) map.removeLayer(onlineTileLayer);
+  const hasMbtiles = await checkMbtilesAvailable();
+  if (hasMbtiles) {
+    if (!offlineTileLayer) {
+      offlineTileLayer = L.tileLayer('/api/offline_tiles/{z}/{x}/{y}.png', { maxZoom: 19 });
+      attachTileRetry(offlineTileLayer);
+    }
+    if (!map.hasLayer(offlineTileLayer)) offlineTileLayer.addTo(map);
+    setMapModeBadge('offline-full');
+    toast('Keine Internetverbindung \u2013 Offline-Karte (volle Detailtiefe) aktiv', 'tlost');
+  } else {
+    const layer = await loadOfflineOutlineLayer();
+    if (layer && !map.hasLayer(layer)) layer.addTo(map);
+    setMapModeBadge('offline-outline');
+    toast('Keine Internetverbindung \u2013 nur vereinfachte Umriss-Karte verf\u00fcgbar ' +
+          '(volle Offline-Karte einrichten: siehe ANLEITUNG.md)', 'tlost');
+  }
+}
+
+function switchToOnlineMap() {
+  if (!usingOfflineMap) return;
+  usingOfflineMap = false;
+  if (offlineTileLayer && map.hasLayer(offlineTileLayer)) map.removeLayer(offlineTileLayer);
+  if (offlineOutlineLayer && map.hasLayer(offlineOutlineLayer)) map.removeLayer(offlineOutlineLayer);
+  if (onlineTileLayer && !map.hasLayer(onlineTileLayer)) onlineTileLayer.addTo(map);
+  setMapModeBadge('online');
+}
+
+async function checkMapConnectivity() {
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 4000);
+    await fetch('https://tile.openstreetmap.org/0/0/0.png',
+      { mode: 'no-cors', signal: controller.signal, cache: 'no-store' });
+    clearTimeout(timer);
+    return true;
+  } catch (e) { return false; }
+}
+
+async function updateMapConnectivity() {
+  const online = await checkMapConnectivity();
+  if (online) switchToOnlineMap();
+  else await switchToOfflineMap();
+}
+if (onlineTileLayer) onlineTileLayer.on('tileerror', () => { updateMapConnectivity(); });
+updateMapConnectivity();
+setInterval(updateMapConnectivity, 60000);
+
+// ══════════════════════════════════════════════════════════
+// NO-FLY-ZONEN (amtliche dipul/DFS-Geo-Zonen)
+// ══════════════════════════════════════════════════════════
+let noFlyZonesLayer = null;
+let noFlyZonesConfig = null;
+let noFlyZonesActive = false;
+
+async function getNoFlyZonesConfig() {
+  if (noFlyZonesConfig !== null) return noFlyZonesConfig;
+  try {
+    const res = await fetch('/api/noflyzones/config');
+    noFlyZonesConfig = await res.json();
+  } catch (e) { noFlyZonesConfig = { enabled: false }; }
+  return noFlyZonesConfig;
+}
+
+async function toggleNoFlyZones() {
+  const btn = document.getElementById('lt-noflyzones');
+  const attrBox = document.getElementById('nfz-attribution');
+  if (noFlyZonesActive) {
+    noFlyZonesActive = false;
+    btn.classList.remove('on');
+    if (noFlyZonesLayer && map.hasLayer(noFlyZonesLayer)) map.removeLayer(noFlyZonesLayer);
+    attrBox.style.display = 'none';
+    return;
+  }
+  if (usingOfflineMap) {
+    toast('No-Fly-Zonen benötigen eine Internetverbindung \u2013 im Offline-Modus nicht verfügbar.', 'tlost');
+    return;
+  }
+  const cfg = await getNoFlyZonesConfig();
+  if (!cfg.enabled || !cfg.wms_url || !cfg.layers) {
+    toast('No-Fly-Zonen sind nicht konfiguriert (siehe config.yaml: noflyzones).', 'tlost');
+    return;
+  }
+  if (!noFlyZonesLayer) {
+    noFlyZonesLayer = L.tileLayer.wms(cfg.wms_url, {
+      layers: cfg.layers, version: cfg.wms_version || '1.3.0',
+      format: 'image/png', transparent: true, maxZoom: 19,
+    });
+  }
+  noFlyZonesLayer.addTo(map);
+  noFlyZonesActive = true;
+  btn.classList.add('on');
+  attrBox.textContent = cfg.attribution || 'Quelle Geodaten: DFS, BKG';
+  attrBox.style.display = 'block';
+  toast('No-Fly-Zonen (dipul/DFS) eingeblendet \u2013 nicht-kommerzielle Nutzung.', 'tnew');
+}
+
+const _origSwitchToOfflineMap = switchToOfflineMap;
+switchToOfflineMap = async function() {
+  await _origSwitchToOfflineMap();
+  if (noFlyZonesActive) {
+    noFlyZonesActive = false;
+    document.getElementById('lt-noflyzones').classList.remove('on');
+    if (noFlyZonesLayer && map.hasLayer(noFlyZonesLayer)) map.removeLayer(noFlyZonesLayer);
+    document.getElementById('nfz-attribution').style.display = 'none';
+    toast('No-Fly-Zonen ausgeblendet \u2013 keine Internetverbindung.', 'tlost');
+  }
+};
+
+map.on('mousemove', e => {
+  const { lat, lng } = e.latlng;
+  document.getElementById('m-cursor').textContent = lat.toFixed(4) + ', ' + lng.toFixed(4);
+  const la = Math.abs(lat), lo = Math.abs(lng);
+  document.getElementById('mcoords').textContent =
+    (lat >= 0 ? 'N' : 'S') + ' ' + (la|0) + '\u00b0' + ((la-(la|0))*60).toFixed(3) + "' " +
+    (lng >= 0 ? 'E' : 'W') + ' ' + (lo|0) + '\u00b0' + ((lo-(lo|0))*60).toFixed(3) + "'";
+});
+map.on('zoomend', () => document.getElementById('m-zoom').textContent = map.getZoom());
+
+// ══════════════════════════════════════════════════════════
+// KARTENMARKIERUNGEN
+// ══════════════════════════════════════════════════════════
+const ANNOT_COLORS = ['#ef4444','#f97316','#eab308','#22c55e','#0ea5e9','#3b82f6','#a855f7','#f8fafc'];
+let annotColor = ANNOT_COLORS[0];
+let annotTool = null;
+let annotPending = null;
+let annotPreviewLayer = null;
+const annotLayers = {};
+
+(function initAnnotColorPicker() {
+  const el = document.getElementById('annot-colors');
+  el.innerHTML = ANNOT_COLORS.map(c =>
+    '<div class="annot-color' + (c === annotColor ? ' on' : '') + '" style="background:' + c + '" data-color="' + c + '"></div>'
+  ).join('');
+  el.querySelectorAll('.annot-color').forEach(sw => {
+    sw.addEventListener('click', () => {
+      annotColor = sw.dataset.color;
+      el.querySelectorAll('.annot-color').forEach(x => x.classList.toggle('on', x === sw));
+    });
+  });
+})();
+
+function annotSetTool(tool) {
+  annotCancel();
+  annotTool = (annotTool === tool) ? null : tool;
+  ['marker','circle','rectangle','measure'].forEach(t => {
+    document.getElementById('annot-tool-' + t).classList.toggle('on', t === annotTool);
+  });
+  if (annotTool === 'measure') map.doubleClickZoom.disable();
+  else map.doubleClickZoom.enable();
+  const hints = {
+    marker: 'Auf die Karte klicken, um einen Marker zu setzen.',
+    circle: 'Mittelpunkt anklicken, dann Klick zum Festlegen des Radius.',
+    rectangle: 'Eine Ecke anklicken, dann die gegenüberliegende Ecke.',
+    measure: 'Klicken für jeden Wegpunkt, Doppelklick zum Beenden.',
+  };
+  document.getElementById('annot-hint').textContent = annotTool
+    ? hints[annotTool] : 'Werkzeug wählen, dann auf die Karte klicken.';
+}
+
+function annotCancel() {
+  annotPending = null;
+  if (annotPreviewLayer) { map.removeLayer(annotPreviewLayer); annotPreviewLayer = null; }
+  document.getElementById('annot-cancel-btn').style.display = 'none';
+  measureClear();
+}
+
+function annotCreate(kind, geometry) {
+  const label = document.getElementById('annot-label-input').value || '';
+  fetch('/api/annotations', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type: kind, color: annotColor, geometry, label })
+  }).then(r => r.json()).then(res => {
+    if (res && res.entry) renderAnnotation(res.entry);
+    document.getElementById('annot-label-input').value = '';
+  }).catch(() => {});
+}
+
+function annotDistanceMeters(ll1, ll2) { return map.distance(ll1, ll2); }
+
+map.on('click', e => {
+  if (!annotTool) return;
+  const ll = [e.latlng.lat, e.latlng.lng];
+  if (annotTool === 'marker') { annotCreate('marker', { lat: ll[0], lon: ll[1] }); return; }
+  if (annotTool === 'circle') {
+    if (!annotPending) {
+      annotPending = { center: ll };
+      document.getElementById('annot-cancel-btn').style.display = 'block';
+      annotPreviewLayer = L.circle(ll, { radius: 1, color: annotColor, weight: 2, fillOpacity: .12 }).addTo(map);
+      map.on('mousemove', annotCirclePreview);
+    } else {
+      const radius = annotDistanceMeters(annotPending.center, ll);
+      map.off('mousemove', annotCirclePreview);
+      if (annotPreviewLayer) { map.removeLayer(annotPreviewLayer); annotPreviewLayer = null; }
+      annotCreate('circle', { lat: annotPending.center[0], lon: annotPending.center[1], radius_m: Math.max(radius, 1) });
+      annotPending = null;
+      document.getElementById('annot-cancel-btn').style.display = 'none';
+    }
+    return;
+  }
+  if (annotTool === 'rectangle') {
+    if (!annotPending) {
+      annotPending = { corner1: ll };
+      document.getElementById('annot-cancel-btn').style.display = 'block';
+      annotPreviewLayer = L.rectangle([ll, ll], { color: annotColor, weight: 2, fillOpacity: .12 }).addTo(map);
+      map.on('mousemove', annotRectPreview);
+    } else {
+      map.off('mousemove', annotRectPreview);
+      if (annotPreviewLayer) { map.removeLayer(annotPreviewLayer); annotPreviewLayer = null; }
+      annotCreate('rectangle', { bounds: [annotPending.corner1, ll] });
+      annotPending = null;
+      document.getElementById('annot-cancel-btn').style.display = 'none';
+    }
+    return;
+  }
+  if (annotTool === 'measure') {
+    if (measurePoints.length === 0) measureClear();
+    measureAddPoint(ll);
+    return;
   }
 });
 
-fetch('/api/offline_tiles/status').then(r=>r.json()).then(s=>{
-  const el = document.getElementById('txt-offline');
-  if (s.available) { el.textContent = 'Offline-Kacheln gefunden: ' + s.path; }
-  else { el.textContent = 'Keine .mbtiles-Datei neben der exe gefunden.'; }
+map.on('dblclick', e => {
+  if (annotTool === 'measure' && measurePoints.length > 0) {
+    L.DomEvent.stopPropagation(e);
+    measureFinish();
+  }
 });
-document.getElementById('chk-offline').onchange = e => {
-  if (e.target.checked) { map.removeLayer(onlineTiles); offlineTiles.addTo(map); }
-  else { map.removeLayer(offlineTiles); onlineTiles.addTo(map); }
-};
 
-// ── Marker-Layer je Datenquelle ─────────────────────────────────
-const adsbLayer = L.layerGroup().addTo(map);
-const flarmLayer = L.layerGroup().addTo(map);
-const starlinkLayer = L.layerGroup();
-const smsLayer = L.layerGroup().addTo(map);
-const annotationLayer = L.layerGroup().addTo(map);
+let measurePoints = [];
+let measureLine = null;
+let measurePreviewSegment = null;
+let measureVertexMarkers = [];
 
-document.getElementById('chk-adsb').onchange = e => e.target.checked ? adsbLayer.addTo(map) : map.removeLayer(adsbLayer);
-document.getElementById('chk-flarm').onchange = e => e.target.checked ? flarmLayer.addTo(map) : map.removeLayer(flarmLayer);
-document.getElementById('chk-starlink').onchange = e => e.target.checked ? starlinkLayer.addTo(map) : map.removeLayer(starlinkLayer);
-document.getElementById('chk-sms').onchange = e => e.target.checked ? smsLayer.addTo(map) : map.removeLayer(smsLayer);
-
-function planeIcon(color){
-  return L.divIcon({className:'', html:`<div style="width:9px;height:9px;background:${color};
-    border-radius:2px;transform:rotate(45deg);box-shadow:0 0 4px ${color};"></div>`, iconSize:[9,9]});
+function measureFormatDistance(m) {
+  if (m >= 1000) return (m / 1000).toFixed(2) + ' km';
+  return Math.round(m) + ' m';
 }
-function dotIcon(color, size){
-  size = size || 9;
-  return L.divIcon({className:'', html:`<div style="width:${size}px;height:${size}px;background:${color};
-    border-radius:50%;border:1px solid #04101c;box-shadow:0 0 5px ${color};"></div>`,
-    iconSize:[size,size]});
-}
-
-function renderAdsb(list){
-  adsbLayer.clearLayers();
-  document.getElementById('cnt-adsb').textContent = list.length;
-  list.forEach(a=>{
-    if (a.lat==null||a.lon==null) return;
-    const m = L.marker([a.lat,a.lon], {icon:planeIcon('#38bdf8')}).addTo(adsbLayer);
-    m.bindPopup(`<b>${a.callsign||a.icao||'?'}</b><br>ICAO: ${a.icao}<br>
-      Höhe: ${a.alt_m||'?'} m<br>Geschw.: ${a.speed_kmh||'?'} km/h<br>Quelle: ${a.source||''}`);
-  });
-}
-function renderFlarm(list){
-  flarmLayer.clearLayers();
-  document.getElementById('cnt-flarm').textContent = list.length;
-  list.forEach(a=>{
-    if (a.lat==null||a.lon==null) return;
-    const m = L.marker([a.lat,a.lon], {icon:dotIcon('#a3e635',8)}).addTo(flarmLayer);
-    m.bindPopup(`<b>${a.ogn_id||'?'}</b><br>Typ: ${a.aircraft_type||'?'}<br>
-      Höhe: ${a.alt_m!=null?a.alt_m+' m':'?'}<br>Kurs: ${a.course_deg||'?'}°`);
-  });
-}
-function renderStarlink(list){
-  starlinkLayer.clearLayers();
-  document.getElementById('cnt-starlink').textContent = list.length;
-  list.forEach(s=>{
-    const m = L.marker([s.lat,s.lon], {icon:dotIcon('#c084fc',6)}).addTo(starlinkLayer);
-    m.bindPopup(`<b>${s.name}</b><br>NORAD: ${s.norad_id}<br>Höhe: ${s.alt_km} km<br>
-      Geschw.: ${s.speed_kmh} km/h`);
-    (s.ground_track||[]).forEach(seg=>{
-      L.polyline(seg, {color:'#c084fc', weight:1, opacity:.5, dashArray:'2,4'}).addTo(starlinkLayer);
-    });
-  });
-}
-
-// ── SMS-Punktketten ──────────────────────────────────────────────
-let smsTracks = {};
-function renderSmsTracks(tracks){
-  smsTracks = tracks;
-  smsLayer.clearLayers();
+function measureTotalMeters(points) {
   let total = 0;
-  const senderListEl = document.getElementById('sender-list');
-  senderListEl.innerHTML = '';
-  Object.values(tracks).forEach(track=>{
-    const pts = track.points || [];
-    total += pts.length;
-    const latlngs = pts.map(p=>[p.lat,p.lon]);
-    if (latlngs.length>1){
-      L.polyline(latlngs, {color:track.color, weight:2, opacity:.85}).addTo(smsLayer);
-    }
-    pts.forEach((p,i)=>{
-      const isLast = i===pts.length-1;
-      const m = L.marker([p.lat,p.lon], {icon:dotIcon(track.color, isLast?12:7)}).addTo(smsLayer);
-      m.bindPopup(`<b>${track.sender}</b><br>${p.received_at? new Date(p.received_at).toLocaleString('de-DE'):''}<br>
-        ${p.confirmed?'✓ angelerntes Format':'⚠ automatisch erkannt'} (${p.pattern_label||''})<br>
-        <span style="font-family:monospace;font-size:10px;">${(p.raw_text||'').replace(/</g,'&lt;')}</span>`);
-    });
-    const row = document.createElement('div');
-    row.className = 'sender-item';
-    row.innerHTML = `<span class="sender-swatch" style="background:${track.color}"></span>
-      <span class="sender-num">${track.sender}</span>
-      <span class="sender-count">${pts.length} Pkt.</span>
-      <button class="btn small danger" title="Punktkette löschen">✕</button>`;
-    row.querySelector('button').onclick = ()=>{
-      if(confirm('Punktkette für '+track.sender+' wirklich löschen?')){
-        fetch('/api/sms/tracks/'+encodeURIComponent(track.sender), {method:'DELETE'})
-          .then(()=>refreshSmsTracks());
+  for (let i = 1; i < points.length; i++) total += map.distance(points[i - 1], points[i]);
+  return total;
+}
+function measureUpdateHint(extraSegmentM) {
+  const total = measureTotalMeters(measurePoints);
+  const extraTxt = extraSegmentM != null ? ' (+' + measureFormatDistance(extraSegmentM) + ')' : '';
+  document.getElementById('annot-hint').textContent =
+    'Strecke: ' + measureFormatDistance(total) + extraTxt + ' \u2013 Doppelklick zum Beenden.';
+}
+function measureAddPoint(ll) {
+  measurePoints.push(ll);
+  measureVertexMarkers.push(
+    L.circleMarker(ll, { radius: 4, color: '#fbbf24', weight: 2, fillColor: '#fbbf24', fillOpacity: 1 }).addTo(map)
+  );
+  if (measureLine) map.removeLayer(measureLine);
+  if (measurePoints.length > 1) {
+    measureLine = L.polyline(measurePoints, { color: '#fbbf24', weight: 2, dashArray: '5,5' }).addTo(map);
+  }
+  document.getElementById('annot-cancel-btn').style.display = 'block';
+  measureUpdateHint();
+  map.off('mousemove', measurePreview);
+  map.on('mousemove', measurePreview);
+}
+function measurePreview(e) {
+  if (!measurePoints.length) return;
+  const last = measurePoints[measurePoints.length - 1];
+  const cur  = [e.latlng.lat, e.latlng.lng];
+  if (measurePreviewSegment) map.removeLayer(measurePreviewSegment);
+  measurePreviewSegment = L.polyline([last, cur], { color: '#fbbf24', weight: 2, dashArray: '2,4', opacity: .6 }).addTo(map);
+  measureUpdateHint(map.distance(last, cur));
+}
+function measureFinish() {
+  map.off('mousemove', measurePreview);
+  if (measurePreviewSegment) { map.removeLayer(measurePreviewSegment); measurePreviewSegment = null; }
+  const total = measureTotalMeters(measurePoints);
+  document.getElementById('annot-hint').textContent = measurePoints.length > 1
+    ? 'Gesamtstrecke: ' + measureFormatDistance(total) + '. Neue Messung: erneut klicken.'
+    : 'Werkzeug wählen, dann auf die Karte klicken.';
+  measurePoints = [];
+  document.getElementById('annot-cancel-btn').style.display = 'none';
+}
+function measureClear() {
+  map.off('mousemove', measurePreview);
+  if (measureLine) { map.removeLayer(measureLine); measureLine = null; }
+  if (measurePreviewSegment) { map.removeLayer(measurePreviewSegment); measurePreviewSegment = null; }
+  measureVertexMarkers.forEach(m => map.removeLayer(m));
+  measureVertexMarkers = [];
+  measurePoints = [];
+}
+function annotCirclePreview(e) {
+  if (!annotPending || !annotPreviewLayer) return;
+  const radius = annotDistanceMeters(annotPending.center, [e.latlng.lat, e.latlng.lng]);
+  annotPreviewLayer.setRadius(Math.max(radius, 1));
+}
+function annotRectPreview(e) {
+  if (!annotPending || !annotPreviewLayer) return;
+  annotPreviewLayer.setBounds([annotPending.corner1, [e.latlng.lat, e.latlng.lng]]);
+}
+function annotDelete(id) {
+  fetch('/api/annotations/' + id, { method: 'DELETE' })
+    .then(() => { if (annotLayers[id]) { map.removeLayer(annotLayers[id]); delete annotLayers[id]; } })
+    .catch(() => {});
+}
+function annotPopupHtml(entry) {
+  const esc2 = (s) => (s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  return '<div style="min-width:140px">' +
+    (entry.label ? '<div style="font-family:var(--mono);font-size:11px;margin-bottom:4px">' + esc2(entry.label) + '</div>' : '') +
+    '<button class="annot-popup-del" onclick="annotDelete(\'' + entry.id + '\')">Entfernen</button>' +
+    '</div>';
+}
+function renderAnnotation(entry) {
+  if (annotLayers[entry.id]) { map.removeLayer(annotLayers[entry.id]); }
+  let layer = null;
+  const g = entry.geometry || {};
+  if (entry.type === 'marker' && g.lat != null && g.lon != null) {
+    const svg = '<svg width="22" height="22" viewBox="0 0 22 22"><circle cx="11" cy="11" r="7" fill="' +
+      entry.color + '" stroke="#0a1220" stroke-width="1.5" opacity=".9"/></svg>';
+    layer = L.marker([g.lat, g.lon], { icon: L.divIcon({ html: svg, className: '', iconSize: [22,22], iconAnchor: [11,11] }) });
+  } else if (entry.type === 'circle' && g.lat != null && g.lon != null) {
+    layer = L.circle([g.lat, g.lon], { radius: g.radius_m || 10, color: entry.color, weight: 2, fillOpacity: .15 });
+  } else if (entry.type === 'rectangle' && Array.isArray(g.bounds)) {
+    layer = L.rectangle(g.bounds, { color: entry.color, weight: 2, fillOpacity: .15 });
+  }
+  if (!layer) return;
+  layer.bindPopup(annotPopupHtml(entry));
+  layer.addTo(map);
+  annotLayers[entry.id] = layer;
+}
+function loadAnnotations(list) {
+  Object.keys(annotLayers).forEach(id => { map.removeLayer(annotLayers[id]); delete annotLayers[id]; });
+  (list || []).forEach(renderAnnotation);
+}
+fetch('/api/annotations').then(r => r.json()).then(loadAnnotations).catch(() => {});
+
+// ══════════════════════════════════════════════════════════
+// VIEWPORT-TRACKING
+// ══════════════════════════════════════════════════════════
+let viewportDebounceTimer = null;
+let lastReportedViewport = null;
+
+function haversineKm(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat/2) ** 2 +
+            Math.cos(lat1 * Math.PI/180) * Math.cos(lat2 * Math.PI/180) *
+            Math.sin(dLon/2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+function viewportChangedSignificantly(next) {
+  if (!lastReportedViewport) return true;
+  const EPS = 0.0001;
+  return Math.abs(next.lat - lastReportedViewport.lat) > EPS ||
+         Math.abs(next.lon - lastReportedViewport.lon) > EPS ||
+         Math.abs(next.radius_km - lastReportedViewport.radius_km) > lastReportedViewport.radius_km * 0.02;
+}
+function reportViewport() {
+  const bounds = map.getBounds();
+  const center = bounds.getCenter();
+  const ne = bounds.getNorthEast();
+  const radius_km = haversineKm(center.lat, center.lng, ne.lat, ne.lng);
+  const next = { lat: center.lat, lon: center.lng, radius_km };
+  if (!viewportChangedSignificantly(next)) return;
+  lastReportedViewport = next;
+  const payload = {
+    lat: center.lat, lon: center.lng, radius_km,
+    bounds: { lamin: bounds.getSouth(), lamax: bounds.getNorth(),
+              lomin: bounds.getWest(),  lomax: bounds.getEast() }
+  };
+  fetch('/api/viewport', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload) }).catch(() => {});
+}
+map.on('moveend', () => {
+  clearTimeout(viewportDebounceTimer);
+  viewportDebounceTimer = setTimeout(reportViewport, 1200);
+});
+setTimeout(reportViewport, 500);
+
+// ══════════════════════════════════════════════════════════
+// STANDORT-BUTTON
+// ══════════════════════════════════════════════════════════
+let locateMarker = null;
+function locateUser() {
+  const btn = document.getElementById('locate-btn');
+  if (!navigator.geolocation) { toast('Standortfreigabe wird von diesem Browser nicht unterstützt.', 'tlost'); return; }
+  const isSecure = window.isSecureContext || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+  if (!isSecure) {
+    toast('Standort nicht verfügbar: Browser erlauben GPS-Zugriff nur über HTTPS oder "localhost".', 'tlost');
+    return;
+  }
+  btn.classList.remove('located', 'error');
+  btn.classList.add('locating');
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      btn.classList.remove('locating'); btn.classList.add('located');
+      setTimeout(() => btn.classList.remove('located'), 2000);
+      const { latitude, longitude, accuracy } = pos.coords;
+      map.flyTo([latitude, longitude], 14, { duration: 1.2 });
+      if (locateMarker) map.removeLayer(locateMarker);
+      locateMarker = L.circleMarker([latitude, longitude], {
+        radius: 8, color: '#38bdf8', weight: 2, fillColor: '#0ea5e9', fillOpacity: 0.3
+      }).addTo(map).bindTooltip('Mein Standort (±' + Math.round(accuracy) + 'm)');
+      toast('📍 Zu deinem Standort gesprungen', 'tnew');
+    },
+    (err) => {
+      btn.classList.remove('locating'); btn.classList.add('error');
+      setTimeout(() => btn.classList.remove('error'), 2000);
+      let msg;
+      switch (err.code) {
+        case err.PERMISSION_DENIED: msg = 'Standortzugriff wurde verweigert.'; break;
+        case err.POSITION_UNAVAILABLE: msg = 'Standort momentan nicht ermittelbar.'; break;
+        case err.TIMEOUT: msg = 'Zeitüberschreitung bei der Standortermittlung.'; break;
+        default: msg = 'Standort konnte nicht ermittelt werden.';
       }
+      toast(msg, 'tlost');
+    },
+    { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
+  );
+}
+
+// ══════════════════════════════════════════════════════════
+// KOORDINATEN-/ADRESSSUCHE
+// ══════════════════════════════════════════════════════════
+function parseCoordinates(text) {
+  text = (text || '').trim();
+  if (!text) return null;
+  const dmsRe = /(\d{1,3})[°:\s]+(\d{1,2})['\u2019:\s]+([\d.,]+)["\u201d]?\s*([NSEWnsew])/g;
+  const dmsMatches = [...text.matchAll(dmsRe)];
+  if (dmsMatches.length >= 2) {
+    const toDeg = (m) => {
+      const deg = parseFloat(m[1]), min = parseFloat(m[2]), sec = parseFloat(m[3].replace(',', '.'));
+      let val = deg + min / 60 + sec / 3600;
+      if (/[SWsw]/.test(m[4])) val = -val;
+      return val;
     };
-    senderListEl.appendChild(row);
-  });
-  document.getElementById('cnt-sms').textContent = total;
+    let lat = null, lon = null;
+    for (const m of dmsMatches) {
+      if (/[NSns]/.test(m[4])) lat = toDeg(m);
+      else if (/[EWew]/.test(m[4])) lon = toDeg(m);
+    }
+    if (lat != null && lon != null && Math.abs(lat) <= 90 && Math.abs(lon) <= 180) return { lat, lon };
+  }
+  let parts = text.split(/\s+/).filter(Boolean);
+  if (parts.length !== 2) parts = text.split(',').map(p => p.trim()).filter(Boolean);
+  if (parts.length === 2) {
+    const toNum = (s) => {
+      s = s.replace(/[°NSEWnsew]/g, '').trim();
+      if (s.indexOf('.') === -1 && s.indexOf(',') !== -1) s = s.replace(',', '.');
+      return parseFloat(s);
+    };
+    const lat = toNum(parts[0]), lon = toNum(parts[1]);
+    if (Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180) return { lat, lon };
+  }
+  return null;
 }
-function refreshSmsTracks(){ fetch('/api/sms/tracks').then(r=>r.json()).then(renderSmsTracks); }
-refreshSmsTracks();
+async function performGeoSearch() {
+  const input = document.getElementById('geo-search-input');
+  const btn   = document.getElementById('geo-search-btn');
+  const query = input.value.trim();
+  if (!query) return;
+  const coords = parseCoordinates(query);
+  if (coords) {
+    map.flyTo([coords.lat, coords.lon], Math.max(map.getZoom(), 13), { duration: 1.2 });
+    toast('Karte zu ' + coords.lat.toFixed(5) + ', ' + coords.lon.toFixed(5) + ' verschoben.', 'tnew');
+    input.blur();
+    return;
+  }
+  btn.classList.add('searching');
+  try {
+    const res = await fetch('/api/geocode?q=' + encodeURIComponent(query));
+    const data = await res.json();
+    if (data.ok) {
+      map.flyTo([data.lat, data.lon], 15, { duration: 1.2 });
+      toast('Gefunden: ' + data.display_name, 'tnew');
+      input.blur();
+    } else { toast(data.error || 'Nichts gefunden.', 'tlost'); }
+  } catch (e) {
+    toast('Adresssuche nicht erreichbar \u2013 pr\u00fcfe die Internetverbindung.', 'tlost');
+  } finally { btn.classList.remove('searching'); }
+}
 
-function refreshSmsFormat(){
-  fetch('/api/sms/format').then(r=>r.json()).then(f=>{
-    const el = document.getElementById('sms-format-info');
-    if (f.pattern_id) el.textContent = 'Angelernt: ' + f.label + ' (seit ' + new Date(f.trained_at).toLocaleDateString('de-DE') + ')';
-    else el.textContent = 'Kein Format angelernt -- automatische Erkennung aktiv.';
+// ══════════════════════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════════════════════
+let adsbList = [], starlinkList = [], flarmList = [];
+let smsTracks = {};
+let adsbMarkers = {}, adsbTrails = {}, adsbTrailPts = {}, adsbPredictLines = {};
+let starlinkMarkers = {}, starlinkTracks = {};
+let flarmMarkers = {};
+let smsMarkers = {}, smsLines = {};
+let selId = null, selType = null;
+let activeTab = 'adsb';
+const layers = { adsb: true, starlink: true, flarm: true, sms: true };
+const MAX_ADSB_TRAIL = 40;
+const ADSB_PREDICT_MINUTES = 3;
+
+setInterval(() => {
+  const n = new Date();
+  document.getElementById('clock').textContent =
+    n.toLocaleTimeString('de-DE', { timeZone: 'Europe/Berlin', hour12: false }) + ' DE';
+}, 1000);
+
+// ══════════════════════════════════════════════════════════
+// ICONS (ADS-B/FLARM/Starlink 1:1 aus OverWatchMK1 übernommen)
+// ══════════════════════════════════════════════════════════
+function starlinkIcon(s, sel) {
+  const c  = sel ? '#c4b5fd' : '#a78bfa';
+  const sz = sel ? 22 : 16;
+  const ring = sel ? '<circle cx="12" cy="12" r="10" fill="none" stroke="' + c + '" stroke-width=".5" opacity=".4"/>' : '';
+  const svg =
+    '<svg width="' + sz + '" height="' + sz + '" viewBox="0 0 24 24" fill="none">' + ring +
+    '<rect x="0.5" y="9" width="7" height="6" fill="none" stroke="' + c + '" stroke-width="1.2"/>' +
+    '<line x1="2.3" y1="9" x2="2.3" y2="15" stroke="' + c + '" stroke-width=".6" opacity=".7"/>' +
+    '<line x1="4.1" y1="9" x2="4.1" y2="15" stroke="' + c + '" stroke-width=".6" opacity=".7"/>' +
+    '<line x1="5.9" y1="9" x2="5.9" y2="15" stroke="' + c + '" stroke-width=".6" opacity=".7"/>' +
+    '<rect x="16.5" y="9" width="7" height="6" fill="none" stroke="' + c + '" stroke-width="1.2"/>' +
+    '<line x1="18.3" y1="9" x2="18.3" y2="15" stroke="' + c + '" stroke-width=".6" opacity=".7"/>' +
+    '<line x1="20.1" y1="9" x2="20.1" y2="15" stroke="' + c + '" stroke-width=".6" opacity=".7"/>' +
+    '<line x1="21.9" y1="9" x2="21.9" y2="15" stroke="' + c + '" stroke-width=".6" opacity=".7"/>' +
+    '<line x1="7.5" y1="12" x2="9" y2="12" stroke="' + c + '" stroke-width="1"/>' +
+    '<line x1="15" y1="12" x2="16.5" y2="12" stroke="' + c + '" stroke-width="1"/>' +
+    '<rect x="9" y="9.5" width="6" height="5" rx="0.8" fill="' + c + '" opacity=".95"/>' +
+    '</svg>';
+  return L.divIcon({ html: svg, className: '', iconSize: [sz,sz], iconAnchor: [sz/2,sz/2], popupAnchor: [0,-sz/2] });
+}
+
+function adsbAircraftShape(category, c) {
+  if (category === 'A7') {
+    return '<circle cx="12" cy="12" r="9.5" fill="none" stroke="' + c + '" stroke-width="1.4" opacity=".9"/>' +
+      '<rect x="10.7" y="9" width="2.6" height="9" rx="1.2" fill="' + c + '" opacity=".95"/>' +
+      '<rect x="12" y="16.5" width="6" height="1.3" fill="' + c + '" opacity=".8"/>';
+  }
+  if (category === 'B1') {
+    return '<path d="M12 2 L12.6 19 L11.4 19 Z" fill="' + c + '" opacity=".95"/>' +
+      '<path d="M12 9.5 L23 11.2 L23 12.2 L12.8 11.5 L11.2 11.5 L1 12.2 L1 11.2 Z" fill="' + c + '" opacity=".9"/>' +
+      '<path d="M12 17 L16.5 18.6 L16.5 19.2 L12.6 18.4 L11.4 18.4 L7.5 19.2 L7.5 18.6 Z" fill="' + c + '" opacity=".8"/>';
+  }
+  if (category === 'B2') {
+    return '<ellipse cx="12" cy="10" rx="7" ry="8.5" fill="' + c + '" opacity=".9"/>' +
+      '<rect x="10.5" y="19" width="3" height="2.5" rx=".5" fill="' + c + '" opacity=".85"/>';
+  }
+  if (category === 'B3' || category === 'B4') {
+    return '<path d="M2 11 A10 8 0 0 1 22 11 Z" fill="' + c + '" opacity=".9"/>' +
+      '<circle cx="12" cy="19" r="1.6" fill="' + c + '" opacity=".85"/>' +
+      '<path d="M6 11 L12 17.5 M18 11 L12 17.5" stroke="' + c + '" stroke-width=".8" opacity=".7" fill="none"/>';
+  }
+  if (category === 'B6') {
+    return '<circle cx="12" cy="12" r="2.6" fill="' + c + '" opacity=".95"/>' +
+      '<circle cx="6" cy="6" r="2.2" fill="none" stroke="' + c + '" stroke-width="1.3" opacity=".85"/>' +
+      '<circle cx="18" cy="6" r="2.2" fill="none" stroke="' + c + '" stroke-width="1.3" opacity=".85"/>' +
+      '<circle cx="6" cy="18" r="2.2" fill="none" stroke="' + c + '" stroke-width="1.3" opacity=".85"/>' +
+      '<circle cx="18" cy="18" r="2.2" fill="none" stroke="' + c + '" stroke-width="1.3" opacity=".85"/>' +
+      '<path d="M8 8 L10.5 10.5 M16 8 L13.5 10.5 M8 16 L10.5 13.5 M16 16 L13.5 13.5" stroke="' + c + '" stroke-width="1" opacity=".85"/>';
+  }
+  return '<path d="M12 1.5 C12.9 1.5 13.4 2.3 13.4 3.4 L13.1 13 L12.9 20.5 C12.9 21.3 12.6 21.8 12 21.8 C11.4 21.8 11.1 21.3 11.1 20.5 L10.9 13 L10.6 3.4 C10.6 2.3 11.1 1.5 12 1.5 Z" ' +
+      'fill="' + c + '" opacity=".95"/>' +
+    '<path d="M12 10.8 L22.3 15.3 C22.7 15.5 22.7 16.3 22.2 16.4 L12.6 14.2 L11.4 14.2 L1.8 16.4 C1.3 16.3 1.3 15.5 1.7 15.3 L12 10.8 Z" ' +
+      'fill="' + c + '" opacity=".95"/>' +
+    '<path d="M12 17.6 L18 20.6 C18.3 20.75 18.25 21.2 17.9 21.25 L12.7 20.3 L11.3 20.3 L6.1 21.25 C5.75 21.2 5.7 20.75 6 20.6 L12 17.6 Z" ' +
+      'fill="' + c + '" opacity=".85"/>';
+}
+
+function adsbIcon(a, sel) {
+  const c   = sel ? '#38bdf8' : '#0ea5e9';
+  const sz  = sel ? 30 : 22;
+  const hdg = a.heading || 0;
+  const ring = sel ? '<circle cx="12" cy="12" r="9" fill="none" stroke="' + c + '" stroke-width=".4" opacity=".4"/>' : '';
+  const svg =
+    '<svg width="' + sz + '" height="' + sz + '" viewBox="0 0 24 24" fill="none">' +
+    '<g transform="rotate(' + hdg + ',12,12)">' + ring +
+    adsbAircraftShape(a.category, c) +
+    '</g></svg>';
+  return L.divIcon({ html: svg, className: '', iconSize: [sz,sz], iconAnchor: [sz/2,sz/2], popupAnchor: [0,-sz/2] });
+}
+
+function esc(s) { return String(s || '').replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
+
+function bindHoverPopup(marker) {
+  marker.on('mouseover', () => marker.openPopup());
+  marker.on('mouseout',  () => marker.closePopup());
+}
+
+function adsbPopup(a) {
+  return '<div style="min-width:170px">' +
+    '<div class="lp-title" style="color:var(--am2)">' + (a.callsign || a.icao || '—') + '</div>' +
+    '<div class="lp-row"><span>ICAO</span><span class="lp-v">' + (a.icao||'—') + '</span></div>' +
+    '<div class="lp-row"><span>H\u00f6he</span><span class="lp-v">' + (a.alt_m != null ? a.alt_m + ' m' : '—') + '</span></div>' +
+    '<div class="lp-row"><span>Speed</span><span class="lp-v">' + (a.speed_kmh != null ? a.speed_kmh + ' km/h' : '—') + '</span></div>' +
+    '<div class="lp-row"><span>Heading</span><span class="lp-v">' + (a.heading != null ? a.heading + '\u00b0' : '—') + '</span></div>' +
+    '<div class="lp-row"><span>Squawk</span><span class="lp-v">' + (a.squawk||'—') + '</span></div>' +
+    '<div class="lp-btn"><button onclick="selectAdsbById(\'' + esc(a.icao||a.callsign) + '\')">Details \u2192</button></div>' +
+    '</div>';
+}
+function starlinkPopup(s) {
+  return '<div style="min-width:170px">' +
+    '<div class="lp-title" style="color:var(--pu2)">' + (s.name||'—') + '</div>' +
+    '<div class="lp-row"><span>NORAD-ID</span><span class="lp-v">' + (s.norad_id||'—') + '</span></div>' +
+    '<div class="lp-row"><span>H\u00f6he</span><span class="lp-v">' + (s.alt_km != null ? s.alt_km + ' km' : '—') + '</span></div>' +
+    '<div class="lp-row"><span>Speed</span><span class="lp-v">' + (s.speed_kmh != null ? s.speed_kmh.toLocaleString('de-DE') + ' km/h' : '—') + '</span></div>' +
+    '<div class="lp-btn"><button onclick="selectStarlinkById(' + (s.norad_id) + ')">Details \u2192</button></div>' +
+    '</div>';
+}
+
+function flarmAircraftShape(aircraftType, c) {
+  const t = aircraftType || '';
+  if (t === 'Helikopter') {
+    return '<circle cx="12" cy="12" r="7.5" fill="none" stroke="' + c + '" stroke-width="1.2" opacity=".9"/>' +
+      '<rect x="11.2" y="7" width="1.6" height="7" rx=".8" fill="' + c + '" opacity=".95"/>' +
+      '<rect x="12" y="12.5" width="4.5" height="1" fill="' + c + '" opacity=".8"/>';
+  }
+  if (t === 'Segelflugzeug' || t === 'Schleppflugzeug') {
+    return '<path d="M12 2.5 L12.5 15 L11.5 15 Z" fill="' + c + '" opacity=".95"/>' +
+      '<path d="M12 7.5 L20 8.7 L20 9.4 L12.6 8.8 L11.4 8.8 L4 9.4 L4 8.7 Z" fill="' + c + '" opacity=".9"/>' +
+      '<path d="M12 12.5 L15 13.5 L15 14 L12.6 13.4 L11.4 13.4 L9 14 L9 13.5 Z" fill="' + c + '" opacity=".8"/>';
+  }
+  if (t === 'Ballon' || t === 'Luftschiff') {
+    return '<ellipse cx="12" cy="9" rx="5.2" ry="6.3" fill="' + c + '" opacity=".9"/>' +
+      '<rect x="10.8" y="15.5" width="2.4" height="2" rx=".4" fill="' + c + '" opacity=".85"/>';
+  }
+  if (t === 'Fallschirm' || t === 'Hängegleiter' || t === 'Gleitschirm') {
+    return '<path d="M4.5 9 A7.5 6 0 0 1 19.5 9 Z" fill="' + c + '" opacity=".9"/>' +
+      '<circle cx="12" cy="14.5" r="1.2" fill="' + c + '" opacity=".85"/>' +
+      '<path d="M8 9 L12 13 M16 9 L12 13" stroke="' + c + '" stroke-width=".7" opacity=".7" fill="none"/>';
+  }
+  if (t === 'UAV/Drohne') {
+    return '<circle cx="12" cy="12" r="2" fill="' + c + '" opacity=".95"/>' +
+      '<circle cx="7.5" cy="7.5" r="1.7" fill="none" stroke="' + c + '" stroke-width="1" opacity=".85"/>' +
+      '<circle cx="16.5" cy="7.5" r="1.7" fill="none" stroke="' + c + '" stroke-width="1" opacity=".85"/>' +
+      '<circle cx="7.5" cy="16.5" r="1.7" fill="none" stroke="' + c + '" stroke-width="1" opacity=".85"/>' +
+      '<circle cx="16.5" cy="16.5" r="1.7" fill="none" stroke="' + c + '" stroke-width="1" opacity=".85"/>';
+  }
+  return '<path d="M12 2 L14 10 L21 13 L14 14.5 L15 21 L12 19 L9 21 L10 14.5 L3 13 L10 10 Z" fill="' + c + '" opacity=".95"/>';
+}
+
+function flarmIcon(f, sel) {
+  const c = sel ? '#ffffff' : '#eab308';
+  const sz = sel ? 22 : 16;
+  const hdg = f.course_deg != null ? f.course_deg : 0;
+  const ring = sel ? '<circle cx="12" cy="12" r="10" fill="none" stroke="' + c + '" stroke-width=".6" opacity=".5"/>' : '';
+  const svg =
+    '<svg width="' + sz + '" height="' + sz + '" viewBox="0 0 24 24" fill="none">' + ring +
+    '<g transform="rotate(' + hdg + ',12,12)">' +
+    flarmAircraftShape(f.aircraft_type, c) +
+    '</g></svg>';
+  return L.divIcon({ html: svg, className: '', iconSize: [sz,sz], iconAnchor: [sz/2,sz/2], popupAnchor: [0,-sz/2] });
+}
+function flarmPopup(f) {
+  return '<div style="min-width:170px">' +
+    '<div class="lp-title" style="color:#eab308">' + (f.aircraft_type||'FLARM') + '</div>' +
+    '<div class="lp-row"><span>OGN-ID</span><span class="lp-v">' + (f.ogn_id||'—') + '</span></div>' +
+    '<div class="lp-row"><span>Höhe</span><span class="lp-v">' + (f.alt_m != null ? Math.round(f.alt_m) + ' m' : '—') + '</span></div>' +
+    '<div class="lp-row"><span>Speed</span><span class="lp-v">' + (f.speed_kt != null ? Math.round(f.speed_kt * 1.852) + ' km/h' : '—') + '</span></div>' +
+    '<div class="lp-row"><span>Steigrate</span><span class="lp-v">' + (f.climb_fpm != null ? f.climb_fpm + ' ft/min' : '—') + '</span></div>' +
+    '<div class="lp-btn"><button onclick="selectFlarmById(\'' + esc(f.ogn_id||'') + '\')">Details \u2192</button></div>' +
+    '</div>';
+}
+
+function smsIcon(color, big) {
+  const sz = big ? 14 : 9;
+  const svg = '<svg width="' + sz + '" height="' + sz + '" viewBox="0 0 20 20"><circle cx="10" cy="10" r="8" fill="' +
+    color + '" stroke="#04101c" stroke-width="1.6"/></svg>';
+  return L.divIcon({ html: svg, className: '', iconSize: [sz,sz], iconAnchor: [sz/2,sz/2], popupAnchor: [0,-sz/2] });
+}
+function smsPopup(track, point) {
+  return '<div style="min-width:170px">' +
+    '<div class="lp-title" style="color:' + track.color + '">' + track.sender + '</div>' +
+    '<div class="lp-row"><span>Empfangen</span><span class="lp-v">' + (point.received_at ? new Date(point.received_at).toLocaleString('de-DE') : '—') + '</span></div>' +
+    '<div class="lp-row"><span>Format</span><span class="lp-v">' + (point.confirmed ? 'angelernt' : 'automatisch') + '</span></div>' +
+    '<div class="lp-btn"><button onclick="selectSmsById(\'' + esc(track.sender) + '\')">Details \u2192</button></div>' +
+    '</div>';
+}
+
+// ══════════════════════════════════════════════════════════
+// MARKER MANAGEMENT
+// ══════════════════════════════════════════════════════════
+function updateAdsbMarkers(list) {
+  const seen = new Set();
+  list.forEach(a => {
+    if (a.lat == null || a.lon == null) return;
+    const id = a.icao || a.callsign;
+    if (!id) return;
+    seen.add(id);
+    const ll = [a.lat, a.lon];
+    const sel = (id === selId && selType === 'adsb');
+    if (adsbMarkers[id]) {
+      adsbMarkers[id].setLatLng(ll);
+      adsbMarkers[id].setIcon(adsbIcon(a, sel));
+      adsbMarkers[id].setPopupContent(adsbPopup(a));
+    } else {
+      const m = L.marker(ll, { icon: adsbIcon(a, sel) }).addTo(map);
+      m.bindPopup(adsbPopup(a));
+      bindHoverPopup(m);
+      m.on('click', () => selectAdsbById(id));
+      adsbMarkers[id] = m;
+    }
+    if (!layers.adsb) adsbMarkers[id].remove(); else adsbMarkers[id].addTo(map);
+
+    if (!adsbTrailPts[id]) adsbTrailPts[id] = [];
+    const tpts = adsbTrailPts[id];
+    const tlast = tpts[tpts.length - 1];
+    if (!tlast || tlast[0] !== a.lat || tlast[1] !== a.lon) {
+      tpts.push(ll);
+      if (tpts.length > MAX_ADSB_TRAIL) tpts.shift();
+    }
+    if (adsbTrails[id]) { adsbTrails[id].setLatLngs(tpts); }
+    else { adsbTrails[id] = L.polyline(tpts, { color: sel ? '#fbbf24' : '#d97706', weight: 1, opacity: .35, dashArray: '2,4' }).addTo(map); }
+    if (!layers.adsb) adsbTrails[id].remove(); else adsbTrails[id].addTo(map);
+
+    if (a.heading != null && a.speed_kmh != null && a.speed_kmh > 5) {
+      const distKm = (a.speed_kmh / 60) * ADSB_PREDICT_MINUTES;
+      const latRad = a.lat * Math.PI / 180;
+      const kmPerDegLat = 111.32;
+      const kmPerDegLon = 111.32 * Math.cos(latRad);
+      const rad = a.heading * Math.PI / 180;
+      const dLat = (distKm * Math.cos(rad)) / kmPerDegLat;
+      const dLon = (distKm * Math.sin(rad)) / (kmPerDegLon || 0.0001);
+      const predEnd = [a.lat + dLat, a.lon + dLon];
+      if (adsbPredictLines[id]) { adsbPredictLines[id].setLatLngs([ll, predEnd]); }
+      else { adsbPredictLines[id] = L.polyline([ll, predEnd], { color: sel ? '#fbbf24' : '#f59e0b', weight: sel ? 2.2 : 1.6, opacity: .8, dashArray: '6,5' }).addTo(map); }
+      if (!layers.adsb) adsbPredictLines[id].remove(); else adsbPredictLines[id].addTo(map);
+    } else if (adsbPredictLines[id]) {
+      map.removeLayer(adsbPredictLines[id]);
+      delete adsbPredictLines[id];
+    }
+  });
+  Object.keys(adsbMarkers).forEach(id => {
+    if (!seen.has(id)) {
+      [adsbMarkers, adsbTrails, adsbPredictLines].forEach(col => {
+        if (col[id]) { map.removeLayer(col[id]); delete col[id]; }
+      });
+      delete adsbTrailPts[id];
+    }
   });
 }
-refreshSmsFormat();
 
-function refreshSmsStatus(){
-  fetch('/api/sms/status').then(r=>r.json()).then(s=>{
-    const dot = document.getElementById('dot-sms'), txt = document.getElementById('txt-sms');
-    if (!s.enabled){ dot.className='status-dot'; txt.textContent='deaktiviert (config.yaml: sms.enabled)'; return; }
-    if (s.connected){ dot.className='status-dot ok'; txt.textContent = s.messages_with_coords+' von '+s.messages_received+' SMS mit Koordinaten'; }
-    else { dot.className='status-dot err'; txt.textContent = s.last_error || 'nicht verbunden'; }
+function updateStarlinkMarkers(list) {
+  const seen = new Set();
+  list.forEach(s => {
+    if (s.lat == null || s.lon == null) return;
+    const id = s.norad_id;
+    if (id == null) return;
+    seen.add(id);
+    const ll = [s.lat, s.lon];
+    const sel = (id === selId && selType === 'starlink');
+    if (starlinkMarkers[id]) {
+      starlinkMarkers[id].setLatLng(ll);
+      starlinkMarkers[id].setIcon(starlinkIcon(s, sel));
+      starlinkMarkers[id].setPopupContent(starlinkPopup(s));
+    } else {
+      const m = L.marker(ll, { icon: starlinkIcon(s, sel) }).addTo(map);
+      m.bindPopup(starlinkPopup(s));
+      bindHoverPopup(m);
+      m.on('click', () => selectStarlinkById(id));
+      starlinkMarkers[id] = m;
+    }
+    if (!layers.starlink) starlinkMarkers[id].remove(); else starlinkMarkers[id].addTo(map);
+
+    if (starlinkTracks[id]) starlinkTracks[id].forEach(line => map.removeLayer(line));
+    starlinkTracks[id] = [];
+    (s.ground_track || []).forEach(segment => {
+      if (segment.length < 2) return;
+      const line = L.polyline(segment, { color: sel ? '#c4b5fd' : '#a78bfa', weight: sel ? 2 : 1.3, opacity: 0.55, dashArray: '4,5' });
+      if (layers.starlink) line.addTo(map);
+      starlinkTracks[id].push(line);
+    });
+  });
+  Object.keys(starlinkMarkers).forEach(id => {
+    if (!seen.has(Number(id)) && !seen.has(id)) {
+      map.removeLayer(starlinkMarkers[id]);
+      delete starlinkMarkers[id];
+      if (starlinkTracks[id]) { starlinkTracks[id].forEach(line => map.removeLayer(line)); delete starlinkTracks[id]; }
+    }
   });
 }
-refreshSmsStatus();
-setInterval(refreshSmsStatus, 5000);
 
-// ── Anlern-Dialog ────────────────────────────────────────────────
-function openLearnModal(){ document.getElementById('learn-modal').classList.add('open'); }
-function closeLearnModal(){ document.getElementById('learn-modal').classList.remove('open'); }
+function updateFlarmMarkers(aircraft) {
+  const seen = new Set();
+  (aircraft || []).forEach(f => {
+    if (f.lat == null || f.lon == null) return;
+    const id = f.ogn_id;
+    seen.add(id);
+    const ll = [f.lat, f.lon];
+    const sel = (id === selId && selType === 'flarm');
+    if (flarmMarkers[id]) {
+      flarmMarkers[id].setLatLng(ll);
+      flarmMarkers[id].setIcon(flarmIcon(f, sel));
+      flarmMarkers[id].setPopupContent(flarmPopup(f));
+    } else {
+      const m = L.marker(ll, { icon: flarmIcon(f, sel) }).addTo(map);
+      m.bindPopup(flarmPopup(f));
+      bindHoverPopup(m);
+      m.on('click', () => selectFlarmById(id));
+      flarmMarkers[id] = m;
+    }
+    if (!layers.flarm) flarmMarkers[id].remove(); else flarmMarkers[id].addTo(map);
+  });
+  Object.keys(flarmMarkers).forEach(id => {
+    if (!seen.has(id)) { map.removeLayer(flarmMarkers[id]); delete flarmMarkers[id]; }
+  });
+}
 
-function runLearnTest(){
+function updateSmsMarkers(tracks) {
+  smsTracks = tracks || {};
+  const seenSenders = new Set(Object.keys(smsTracks));
+  Object.keys(smsMarkers).forEach(sender => {
+    if (!seenSenders.has(sender)) {
+      smsMarkers[sender].forEach(m => map.removeLayer(m));
+      delete smsMarkers[sender];
+      if (smsLines[sender]) { map.removeLayer(smsLines[sender]); delete smsLines[sender]; }
+    }
+  });
+  Object.values(smsTracks).forEach(track => {
+    const pts = track.points || [];
+    const latlngs = pts.map(p => [p.lat, p.lon]);
+    if (smsLines[track.sender]) map.removeLayer(smsLines[track.sender]);
+    if (latlngs.length > 1) {
+      smsLines[track.sender] = L.polyline(latlngs, { color: track.color, weight: 2, opacity: .85 });
+      if (layers.sms) smsLines[track.sender].addTo(map);
+    }
+    if (smsMarkers[track.sender]) smsMarkers[track.sender].forEach(m => map.removeLayer(m));
+    smsMarkers[track.sender] = pts.map((p, i) => {
+      const isLast = i === pts.length - 1;
+      const sel = (track.sender === selId && selType === 'sms');
+      const m = L.marker([p.lat, p.lon], { icon: smsIcon(track.color, isLast || sel) });
+      m.bindPopup(smsPopup(track, p));
+      bindHoverPopup(m);
+      if (layers.sms) m.addTo(map);
+      return m;
+    });
+  });
+}
+
+// ══════════════════════════════════════════════════════════
+// RENDER LISTS
+// ══════════════════════════════════════════════════════════
+function renderAdsbList() {
+  const el = document.getElementById('adsb-list');
+  if (!adsbList.length) { el.innerHTML = '<div class="empty">Kein ADS-B Empfang</div>'; return; }
+  const rows = adsbList.map(a => {
+    const id = a.icao || a.callsign;
+    const sel = (id === selId && selType === 'adsb');
+    return '<div class="ai' + (sel ? ' sel' : '') + '" data-aid="' + id + '">' +
+      '<div class="ai-dot"></div>' +
+      '<div class="ai-info">' +
+        '<div class="ai-cs">' + (a.callsign || a.icao || '—') + '</div>' +
+        '<div class="ai-icao">' + (a.icao || '—') + '</div>' +
+        '<div class="ai-coord">' + (a.lat != null ? a.lat.toFixed(4) : '—') + ', ' + (a.lon != null ? a.lon.toFixed(4) : '—') + '</div>' +
+      '</div>' +
+      '<div class="ai-ra">' +
+        '<div class="ai-alt">' + (a.alt_m != null ? a.alt_m + ' m' : '—') + '</div>' +
+        '<div class="ai-spd">' + (a.speed_kmh != null ? a.speed_kmh + ' km/h' : '—') + '</div>' +
+      '</div></div>';
+  });
+  el.innerHTML = rows.join('');
+  el.querySelectorAll('[data-aid]').forEach(row => row.addEventListener('click', () => selectAdsbById(row.dataset.aid)));
+}
+
+function renderFlarmList() {
+  const el = document.getElementById('flarm-list');
+  if (!flarmList.length) { el.innerHTML = '<div class="empty">Kein FLARM/OGN Empfang</div>'; return; }
+  el.innerHTML = flarmList.map(f => {
+    const sel = (f.ogn_id === selId && selType === 'flarm');
+    return '<div class="ai' + (sel ? ' sel' : '') + '" data-fid="' + f.ogn_id + '">' +
+      '<div class="ai-dot" style="background:#eab308"></div>' +
+      '<div class="ai-info">' +
+        '<div class="ai-cs">' + (f.aircraft_type || 'FLARM') + '</div>' +
+        '<div class="ai-icao">' + (f.ogn_id || '—') + '</div>' +
+        '<div class="ai-coord">' + (f.lat != null ? f.lat.toFixed(4) : '—') + ', ' + (f.lon != null ? f.lon.toFixed(4) : '—') + '</div>' +
+      '</div>' +
+      '<div class="ai-ra"><div class="ai-spd">' + (f.alt_m != null ? Math.round(f.alt_m) + ' m' : '—') + '</div></div>' +
+      '</div>';
+  }).join('');
+  el.querySelectorAll('[data-fid]').forEach(row => row.addEventListener('click', () => selectFlarmById(row.dataset.fid)));
+}
+
+function renderStarlinkList() {
+  const el = document.getElementById('starlink-list');
+  if (!starlinkList.length) { el.innerHTML = '<div class="empty">Keine Satelliten im sichtbaren Kartenausschnitt</div>'; return; }
+  const rows = starlinkList.map(s => {
+    const id = s.norad_id;
+    const sel = (id === selId && selType === 'starlink');
+    return '<div class="si' + (sel ? ' sel' : '') + '" data-nid="' + id + '">' +
+      '<div class="si-dot"></div>' +
+      '<div class="si-info">' +
+        '<div class="si-name">' + (s.name || '—') + '</div>' +
+        '<div class="si-norad">NORAD ' + id + '</div>' +
+        '<div class="si-coord">' + (s.lat != null ? s.lat.toFixed(3) : '—') + ', ' + (s.lon != null ? s.lon.toFixed(3) : '—') + '</div>' +
+      '</div>' +
+      '<div class="si-ra">' +
+        '<div class="si-alt">' + (s.alt_km != null ? s.alt_km + ' km' : '—') + '</div>' +
+        '<div class="si-spd">' + (s.speed_kmh != null ? s.speed_kmh.toLocaleString('de-DE') + ' km/h' : '—') + '</div>' +
+      '</div></div>';
+  });
+  el.innerHTML = rows.join('');
+  el.querySelectorAll('.si').forEach(row => row.addEventListener('click', () => selectStarlinkById(Number(row.dataset.nid))));
+}
+
+function timeAgo(ts) {
+  if (!ts) return '—';
+  const d = (typeof ts === 'number') ? ts * 1000 : new Date(ts).getTime();
+  const s = Math.floor((Date.now() - d) / 1000);
+  if (s < 60) return s + 's';
+  if (s < 3600) return Math.floor(s/60) + 'min';
+  return Math.floor(s/3600) + 'h';
+}
+
+function renderSmsList() {
+  const el = document.getElementById('sms-list');
+  const senders = Object.values(smsTracks);
+  if (!senders.length) {
+    el.innerHTML = '<div class="empty">Noch keine SMS-Ortungsdaten \u2013 "Format anlernen" klicken, sobald die erste Ortungs-SMS eingetroffen ist</div>';
+    return;
+  }
+  el.innerHTML = senders.map(track => {
+    const pts = track.points || [];
+    const last = pts[pts.length - 1] || {};
+    const sel = (track.sender === selId && selType === 'sms');
+    return '<div class="smi' + (sel ? ' sel' : '') + '" data-sender="' + esc(track.sender) + '">' +
+      '<div class="smi-dot" style="background:' + track.color + ';box-shadow:0 0 6px ' + track.color + '"></div>' +
+      '<div class="smi-info">' +
+        '<div class="smi-num" style="color:' + track.color + '">' + track.sender + '</div>' +
+        '<div class="smi-text">' + (last.raw_text || '').replace(/</g,'&lt;') + '</div>' +
+      '</div>' +
+      '<div class="smi-ra">' +
+        '<div class="smi-cnt">' + pts.length + '</div>' +
+        '<div class="smi-time">' + timeAgo(last.received_at) + '</div>' +
+      '</div></div>';
+  }).join('');
+  el.querySelectorAll('[data-sender]').forEach(row => row.addEventListener('click', () => selectSmsById(row.dataset.sender)));
+}
+
+// ══════════════════════════════════════════════════════════
+// SELECTION
+// ══════════════════════════════════════════════════════════
+function selectAdsbById(id) {
+  const a = adsbList.find(x => (x.icao || x.callsign) === id);
+  if (!a) return;
+  selId = id; selType = 'adsb';
+  if (a.lat != null) map.flyTo([a.lat, a.lon], Math.max(map.getZoom(), 12), { duration: 0.8 });
+  showAdsbDetail(a);
+  renderAdsbList();
+  Object.keys(adsbMarkers).forEach(mid => {
+    const aa = adsbList.find(x => (x.icao || x.callsign) === mid);
+    if (aa && adsbMarkers[mid]) adsbMarkers[mid].setIcon(adsbIcon(aa, mid === id));
+  });
+}
+function selectStarlinkById(id) {
+  id = Number(id);
+  const s = starlinkList.find(x => x.norad_id === id);
+  if (!s) return;
+  selId = id; selType = 'starlink';
+  if (s.lat != null) map.flyTo([s.lat, s.lon], Math.max(map.getZoom(), 6), { duration: 0.8 });
+  showStarlinkDetail(s);
+  renderStarlinkList();
+  Object.keys(starlinkMarkers).forEach(mid => {
+    const ss = starlinkList.find(x => x.norad_id === Number(mid));
+    if (ss && starlinkMarkers[mid]) starlinkMarkers[mid].setIcon(starlinkIcon(ss, Number(mid) === id));
+  });
+}
+function selectFlarmById(id) {
+  const item = flarmList.find(x => x.ogn_id === id);
+  if (!item) return;
+  selId = id; selType = 'flarm';
+  if (item.lat != null) map.flyTo([item.lat, item.lon], Math.max(map.getZoom(), 14), { duration: 0.8 });
+  showFlarmDetail(item);
+  renderFlarmList();
+  Object.keys(flarmMarkers).forEach(mid => {
+    const ff = flarmList.find(x => x.ogn_id === mid);
+    if (ff && flarmMarkers[mid]) flarmMarkers[mid].setIcon(flarmIcon(ff, mid === id));
+  });
+}
+function selectSmsById(sender) {
+  const track = smsTracks[sender];
+  if (!track) return;
+  selId = sender; selType = 'sms';
+  const pts = track.points || [];
+  const last = pts[pts.length - 1];
+  if (last) map.flyTo([last.lat, last.lon], Math.max(map.getZoom(), 13), { duration: 0.8 });
+  showSmsDetail(track);
+  renderSmsList();
+  updateSmsMarkers(smsTracks);
+}
+window.selectAdsbById = selectAdsbById;
+window.selectStarlinkById = selectStarlinkById;
+window.selectFlarmById = selectFlarmById;
+window.selectSmsById = selectSmsById;
+
+function closeDetail() {
+  document.getElementById('detail').classList.remove('vis');
+  selId = null; selType = null;
+  renderAdsbList(); renderFlarmList(); renderStarlinkList(); renderSmsList();
+  Object.keys(adsbMarkers).forEach(id => {
+    const aa = adsbList.find(x => (x.icao || x.callsign) === id);
+    if (aa && adsbMarkers[id]) adsbMarkers[id].setIcon(adsbIcon(aa, false));
+  });
+  Object.keys(starlinkMarkers).forEach(id => {
+    const ss = starlinkList.find(x => x.norad_id === Number(id));
+    if (ss && starlinkMarkers[id]) starlinkMarkers[id].setIcon(starlinkIcon(ss, false));
+  });
+  Object.keys(flarmMarkers).forEach(id => {
+    const ff = flarmList.find(x => x.ogn_id === id);
+    if (ff && flarmMarkers[id]) flarmMarkers[id].setIcon(flarmIcon(ff, false));
+  });
+  updateSmsMarkers(smsTracks);
+}
+
+// ══════════════════════════════════════════════════════════
+// DETAIL PANELS
+// ══════════════════════════════════════════════════════════
+function showAdsbDetail(a) {
+  document.getElementById('detail').classList.add('vis');
+  document.getElementById('d-hid').textContent = a.callsign || a.icao || '—';
+  document.getElementById('d-body').innerHTML =
+    '<div class="dsec"><div class="dsec-t">ADS-B Identifikation</div><div class="dgrid">' +
+    '<div class="drow"><div class="dk">ICAO Hex</div><div class="dv am">' + (a.icao||'—') + '</div></div>' +
+    '<div class="drow"><div class="dk">Callsign</div><div class="dv hi">' + (a.callsign||'—') + '</div></div>' +
+    '<div class="drow"><div class="dk">Squawk</div><div class="dv">' + (a.squawk||'—') + '</div></div>' +
+    '<div class="drow"><div class="dk">Am Boden</div><div class="dv">' + (a.on_ground ? 'Ja' : 'Nein') + '</div></div>' +
+    '</div></div>' +
+    '<div class="dsec"><div class="dsec-t">Position &amp; Bewegung</div><div class="dgrid">' +
+    '<div class="drow"><div class="dk">Latitude</div><div class="dv">' + (a.lat != null ? a.lat.toFixed(5) : '—') + '</div></div>' +
+    '<div class="drow"><div class="dk">Longitude</div><div class="dv">' + (a.lon != null ? a.lon.toFixed(5) : '—') + '</div></div>' +
+    '<div class="drow"><div class="dk">H\u00f6he</div><div class="dv hi">' + (a.alt_m != null ? a.alt_m + ' m' : '—') + '</div></div>' +
+    '<div class="drow"><div class="dk">Geschwindigkeit</div><div class="dv">' + (a.speed_kmh != null ? a.speed_kmh + ' km/h' : '—') + '</div></div>' +
+    '<div class="drow"><div class="dk">Heading</div><div class="dv hi">' + (a.heading != null ? a.heading + '\u00b0' : '—') + '</div></div>' +
+    '<div class="drow"><div class="dk">Vertikal-Rate</div><div class="dv">' + (a.vert_rate != null ? a.vert_rate + ' ft/min' : '—') + '</div></div>' +
+    '</div></div>' +
+    '<div class="dsec"><div class="dsec-t">Quelle</div><div class="dgrid">' +
+    '<div class="drow full"><div class="dk">Datenquelle</div><div class="dv">' + (a.source||'—') + '</div></div>' +
+    '</div></div>';
+}
+function showStarlinkDetail(s) {
+  document.getElementById('detail').classList.add('vis');
+  document.getElementById('d-hid').textContent = s.name || ('NORAD ' + s.norad_id);
+  document.getElementById('d-body').innerHTML =
+    '<div class="dsec"><div class="dsec-t">Satelliten-Identifikation</div><div class="dgrid">' +
+    '<div class="drow full"><div class="dk">Name</div><div class="dv hi" style="color:var(--pu2)">' + (s.name||'—') + '</div></div>' +
+    '<div class="drow"><div class="dk">NORAD-ID</div><div class="dv">' + (s.norad_id||'—') + '</div></div>' +
+    '</div></div>' +
+    '<div class="dsec"><div class="dsec-t">Position &amp; Bewegung</div><div class="dgrid">' +
+    '<div class="drow"><div class="dk">Latitude</div><div class="dv">' + (s.lat != null ? s.lat.toFixed(5) : '—') + '</div></div>' +
+    '<div class="drow"><div class="dk">Longitude</div><div class="dv">' + (s.lon != null ? s.lon.toFixed(5) : '—') + '</div></div>' +
+    '<div class="drow"><div class="dk">H\u00f6he</div><div class="dv hi" style="color:var(--pu2)">' + (s.alt_km != null ? s.alt_km + ' km' : '—') + '</div></div>' +
+    '<div class="drow"><div class="dk">Geschwindigkeit</div><div class="dv">' + (s.speed_kmh != null ? s.speed_kmh.toLocaleString('de-DE') + ' km/h' : '—') + '</div></div>' +
+    '</div></div>' +
+    '<div class="dsec"><div class="dsec-t">Hinweis</div><div class="dgrid">' +
+    '<div class="drow full"><div class="dk">Datenquelle</div><div class="dv">CelesTrak (\u00f6ffentliche Bahnelemente, SGP4-Modell)</div></div>' +
+    '</div></div>';
+}
+function showFlarmDetail(f) {
+  document.getElementById('detail').classList.add('vis');
+  document.getElementById('d-hid').textContent = f.aircraft_type || 'FLARM';
+  document.getElementById('d-body').innerHTML =
+    '<div class="dsec"><div class="dsec-t">FLARM/OGN</div><div class="dgrid">' +
+    '<div class="drow"><div class="dk">OGN-ID</div><div class="dv hi" style="color:#eab308">' + (f.ogn_id||'—') + '</div></div>' +
+    '<div class="drow"><div class="dk">Typ</div><div class="dv">' + (f.aircraft_type||'—') + '</div></div>' +
+    '</div></div>' +
+    '<div class="dsec"><div class="dsec-t">Position &amp; Bewegung</div><div class="dgrid">' +
+    '<div class="drow"><div class="dk">Latitude</div><div class="dv">' + (f.lat != null ? f.lat.toFixed(5) : '—') + '</div></div>' +
+    '<div class="drow"><div class="dk">Longitude</div><div class="dv">' + (f.lon != null ? f.lon.toFixed(5) : '—') + '</div></div>' +
+    '<div class="drow"><div class="dk">Höhe</div><div class="dv">' + (f.alt_m != null ? Math.round(f.alt_m) + ' m' : '—') + '</div></div>' +
+    '<div class="drow"><div class="dk">Geschwindigkeit</div><div class="dv">' + (f.speed_kt != null ? Math.round(f.speed_kt * 1.852) + ' km/h' : '—') + '</div></div>' +
+    '<div class="drow"><div class="dk">Kurs</div><div class="dv hi" style="color:#eab308">' + (f.course_deg != null ? f.course_deg + '\u00b0' : '—') + '</div></div>' +
+    '<div class="drow"><div class="dk">Steigrate</div><div class="dv">' + (f.climb_fpm != null ? f.climb_fpm + ' ft/min' : '—') + '</div></div>' +
+    '</div></div>' +
+    '<div class="dsec"><div class="dsec-t">Quelle</div><div class="dgrid">' +
+    '<div class="drow full"><div class="dk">Empfangen über</div><div class="dv">Internet (OGN Netzwerk)</div></div>' +
+    (f.snr_db != null ? '<div class="drow"><div class="dk">Signalstärke</div><div class="dv">' + f.snr_db + ' dB</div></div>' : '') +
+    '</div></div>';
+}
+function showSmsDetail(track) {
+  document.getElementById('detail').classList.add('vis');
+  document.getElementById('d-hid').textContent = track.sender;
+  const pts = track.points || [];
+  const last = pts[pts.length - 1] || {};
+  const recentRows = pts.slice(-10).reverse().map(p =>
+    '<div class="drow full"><div class="dk">' + (p.received_at ? new Date(p.received_at).toLocaleString('de-DE') : '—') + '</div>' +
+    '<div class="dv">' + p.lat.toFixed(5) + ', ' + p.lon.toFixed(5) + (p.confirmed ? '' : ' (unbest\u00e4tigt)') + '</div></div>'
+  ).join('');
+  document.getElementById('d-body').innerHTML =
+    '<div class="dsec"><div class="dsec-t">Absender</div><div class="dgrid">' +
+    '<div class="drow full"><div class="dk">Nummer</div><div class="dv hi" style="color:' + track.color + '">' + track.sender + '</div></div>' +
+    '<div class="drow"><div class="dk">Punkte gesamt</div><div class="dv">' + pts.length + '</div></div>' +
+    '<div class="drow"><div class="dk">Letzte Meldung</div><div class="dv">' + timeAgo(last.received_at) + '</div></div>' +
+    '</div></div>' +
+    '<div class="dsec"><div class="dsec-t">Letzte Nachricht (Rohtext)</div><div class="dgrid">' +
+    '<div class="drow full"><div class="dv" style="word-break:break-word">' + (last.raw_text || '—').replace(/</g,'&lt;') + '</div></div>' +
+    '</div></div>' +
+    '<div class="dsec"><div class="dsec-t">Punktverlauf (letzte 10)</div><div class="dgrid">' + recentRows + '</div></div>' +
+    '<div class="dsec">' +
+    '<button class="sms-btn" style="width:100%;margin-bottom:6px;" onclick="openLearnModal()">Format anlernen</button>' +
+    '<button class="sms-btn" style="width:100%;border-color:var(--rd2);color:var(--rd2);" onclick="deleteSmsTrack(\'' + esc(track.sender) + '\')">Punktkette löschen</button>' +
+    '</div>';
+}
+function deleteSmsTrack(sender) {
+  if (!confirm('Punktkette für ' + sender + ' wirklich löschen?')) return;
+  fetch('/api/sms/tracks/' + encodeURIComponent(sender), { method: 'DELETE' }).then(() => {
+    closeDetail();
+    fetchSmsTracks();
+  });
+}
+
+// ══════════════════════════════════════════════════════════
+// TABS / LAYER
+// ══════════════════════════════════════════════════════════
+function switchTab(t) {
+  activeTab = t;
+  document.getElementById('tab-adsb-tab').classList.toggle('active', t === 'adsb');
+  document.getElementById('tab-flarm-tab').classList.toggle('active', t === 'flarm');
+  document.getElementById('tab-starlink-tab').classList.toggle('active', t === 'starlink');
+  document.getElementById('tab-sms-tab').classList.toggle('active', t === 'sms');
+  document.getElementById('adsb-list').classList.toggle('visible', t === 'adsb');
+  document.getElementById('flarm-list').classList.toggle('visible', t === 'flarm');
+  document.getElementById('starlink-list').classList.toggle('visible', t === 'starlink');
+  document.getElementById('sms-list').classList.toggle('visible', t === 'sms');
+  document.getElementById('sms-toolbar').style.display = (t === 'sms') ? 'flex' : 'none';
+  if (t === 'adsb') { renderAdsbList(); document.getElementById('list-cnt').textContent = adsbList.length; }
+  else if (t === 'flarm') { renderFlarmList(); document.getElementById('list-cnt').textContent = flarmList.length; }
+  else if (t === 'starlink') { renderStarlinkList(); document.getElementById('list-cnt').textContent = starlinkList.length; }
+  else { renderSmsList(); document.getElementById('list-cnt').textContent = Object.keys(smsTracks).length + ' Absender'; }
+}
+
+function toggleLayer(l) {
+  layers[l] = !layers[l];
+  document.getElementById('lt-' + l).classList.toggle('on', layers[l]);
+  const show = (col, vis) => Object.values(col).forEach(m => { if (m) { if (vis) m.addTo(map); else map.removeLayer(m); } });
+  if (l === 'adsb') { show(adsbMarkers, layers.adsb); show(adsbTrails, layers.adsb); show(adsbPredictLines, layers.adsb); }
+  if (l === 'flarm') show(flarmMarkers, layers.flarm);
+  if (l === 'starlink') {
+    show(starlinkMarkers, layers.starlink);
+    Object.values(starlinkTracks).forEach(lines => lines.forEach(line => { if (layers.starlink) line.addTo(map); else map.removeLayer(line); }));
+  }
+  if (l === 'sms') {
+    Object.values(smsMarkers).forEach(arr => arr.forEach(m => { if (layers.sms) m.addTo(map); else map.removeLayer(m); }));
+    Object.values(smsLines).forEach(line => { if (layers.sms) line.addTo(map); else map.removeLayer(line); });
+  }
+}
+
+function toast(msg, cls) {
+  const c = document.getElementById('toasts');
+  const t = document.createElement('div');
+  t.className = 'toast ' + (cls || '');
+  t.textContent = msg;
+  c.appendChild(t);
+  setTimeout(() => t.style.opacity = '0', 3000);
+  setTimeout(() => t.remove(), 3400);
+}
+
+// ══════════════════════════════════════════════════════════
+// STATUS BADGES
+// ══════════════════════════════════════════════════════════
+function updateSystemStatus(connected) {
+  const dot = document.getElementById('sys-dot'), txt = document.getElementById('sys-txt');
+  if (!dot || !txt) return;
+  if (!connected) { dot.className = 'sdot err'; txt.textContent = 'Getrennt'; return; }
+  dot.className = 'sdot'; txt.textContent = 'Verbunden';
+}
+function updateAdsbBadge(status) {
+  const badge = document.getElementById('badge-adsb');
+  if (!badge || !status) return;
+  if (status.last_error) { badge.className = 'badge err'; badge.title = 'Fehler: ' + status.last_error; }
+  else if (status.last_success_ts) { badge.className = 'badge on'; badge.title = 'Provider: ' + (status.provider||'?') + ' \u2013 letzter Abruf vor ' + timeAgo(status.last_success_ts); }
+  else if (status.active) { badge.className = 'badge wait'; badge.title = 'Wartet auf ersten erfolgreichen Abruf...'; }
+  else { badge.className = 'badge off'; badge.title = 'ADS-B Empfang deaktiviert'; }
+}
+function updateFlarmBadge(status) {
+  const badge = document.getElementById('badge-flarm');
+  if (!badge || !status) return;
+  if (status.last_error) { badge.className = 'badge err'; badge.title = 'Fehler: ' + status.last_error; }
+  else if (status.last_success_ts) { badge.className = 'badge on'; badge.title = 'Letzte Position vor ' + timeAgo(status.last_success_ts); }
+  else if (status.active) { badge.className = 'badge wait'; badge.title = 'Verbunden, wartet auf erste Position...'; }
+  else { badge.className = 'badge off'; badge.title = 'FLARM/OGN Empfang deaktiviert'; }
+}
+function updateStarlinkBadge(status) {
+  const badge = document.getElementById('badge-starlink');
+  if (!badge || !status) return;
+  if (status.last_error) { badge.className = 'badge err'; badge.title = 'Fehler: ' + status.last_error; }
+  else if (status.last_success_ts) { badge.className = 'badge on'; badge.title = status.satellite_count + ' Bahnelemente geladen \u2013 letztes Update vor ' + timeAgo(status.last_success_ts); }
+  else if (status.active) { badge.className = 'badge wait'; badge.title = 'Wartet auf ersten TLE-Abruf...'; }
+  else { badge.className = 'badge off'; badge.title = 'Starlink-Tracker deaktiviert'; }
+}
+function updateSmsBadge(status) {
+  const badge = document.getElementById('badge-sms');
+  if (!badge || !status) return;
+  if (!status.enabled) { badge.className = 'badge off'; badge.title = 'SMS-Ortung deaktiviert (config.yaml: sms.enabled)'; }
+  else if (status.last_error) { badge.className = 'badge err'; badge.title = 'Fehler: ' + status.last_error; }
+  else if (status.connected) { badge.className = 'badge on'; badge.title = status.messages_with_coords + ' von ' + status.messages_received + ' SMS mit Koordinaten'; }
+  else { badge.className = 'badge wait'; badge.title = 'Verbinde mit Modem...'; }
+}
+
+// ══════════════════════════════════════════════════════════
+// SMS-ANLERNEN / INBOX
+// ══════════════════════════════════════════════════════════
+function openLearnModal() { document.getElementById('learn-modal').classList.add('open'); }
+function closeLearnModal() { document.getElementById('learn-modal').classList.remove('open'); }
+function openInboxModal() { document.getElementById('inbox-modal').classList.add('open'); refreshInbox(); }
+function closeInboxModal() { document.getElementById('inbox-modal').classList.remove('open'); }
+function toggleInbox() { openInboxModal(); }
+
+function runLearnTest() {
   const text = document.getElementById('learn-text').value.trim();
   const customRegex = document.getElementById('learn-custom-regex').value.trim();
   if (!text) return;
-  fetch('/api/sms/learn', {method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({sample_text:text, custom_regex:customRegex})})
-    .then(r=>r.json()).then(res=>{
+  fetch('/api/sms/learn', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sample_text: text, custom_regex: customRegex }) })
+    .then(r => r.json()).then(res => {
       const box = document.getElementById('learn-candidates');
       box.innerHTML = '';
-      if (!res.ok){ box.innerHTML = '<p style="color:var(--rd2)">'+res.error+'</p>'; return; }
-      if (!res.candidates.length){ box.innerHTML = '<p style="color:var(--am2)">Kein Muster hat einen Treffer gefunden.</p>'; return; }
-      res.candidates.forEach(c=>{
+      if (!res.ok) { box.innerHTML = '<p style="color:var(--rd2);font-size:11px;margin-top:8px;">' + res.error + '</p>'; return; }
+      if (!res.candidates.length) { box.innerHTML = '<p style="color:var(--am2);font-size:11px;margin-top:8px;">Kein Muster hat einen Treffer gefunden.</p>'; return; }
+      res.candidates.forEach(c => {
         const div = document.createElement('div');
         div.className = 'candidate';
-        div.innerHTML = `<div class="cand-label">${c.label}</div>
-          <div class="cand-val">Lat: ${c.lat}  Lon: ${c.lon}</div>
-          <div style="font-size:10px;color:var(--tx2);margin-top:3px;">Treffer: "${c.matched_text}"</div>`;
-        div.onclick = ()=>confirmLearn(c, text);
+        div.innerHTML = '<div class="cl">' + c.label + '</div><div class="cv">Lat: ' + c.lat + '  Lon: ' + c.lon + '</div>' +
+          '<div style="font-size:10px;color:var(--tx2);margin-top:3px;">Treffer: "' + c.matched_text + '"</div>';
+        div.onclick = () => confirmLearn(c, text);
         box.appendChild(div);
       });
     });
 }
-
-function confirmLearn(candidate, exampleText){
-  fetch('/api/sms/learn/confirm', {method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({pattern_id:candidate.pattern_id, label:candidate.label,
-                          example_text:exampleText, custom_regex:candidate.custom_regex||null})})
-    .then(r=>r.json()).then(()=>{ closeLearnModal(); refreshSmsFormat(); });
+function confirmLearn(candidate, exampleText) {
+  fetch('/api/sms/learn/confirm', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pattern_id: candidate.pattern_id, label: candidate.label,
+                          example_text: exampleText, custom_regex: candidate.custom_regex || null }) })
+    .then(r => r.json()).then(() => { closeLearnModal(); toast('SMS-Koordinatenformat angelernt.', 'tnew'); });
 }
-
-function resetLearnedFormat(){
+function resetLearnedFormat() {
   if (!confirm('Angelerntes Format wirklich zurücksetzen?')) return;
-  fetch('/api/sms/format', {method:'DELETE'}).then(()=>{ refreshSmsFormat(); closeLearnModal(); });
+  fetch('/api/sms/format', { method: 'DELETE' }).then(() => { closeLearnModal(); toast('SMS-Format zurückgesetzt.', 'tlost'); });
 }
-
-// ── Inbox (letzte empfangene SMS, zum Anlernen nutzbar) ──────────
-function toggleInbox(){
-  const el = document.getElementById('inbox-list');
-  if (el.style.display==='none'){ el.style.display='block'; refreshInbox(); }
-  else el.style.display='none';
-}
-function refreshInbox(){
-  fetch('/api/sms/inbox').then(r=>r.json()).then(list=>{
+function refreshInbox() {
+  fetch('/api/sms/inbox').then(r => r.json()).then(list => {
     const el = document.getElementById('inbox-list');
-    el.innerHTML = '';
-    if (!list.length){ el.innerHTML = '<p style="font-size:10px;color:var(--tx2)">Noch keine SMS empfangen.</p>'; return; }
-    list.forEach(m=>{
-      const div = document.createElement('div');
-      div.className = 'inbox-item ' + (m.parsed?'parsed':'unparsed');
-      div.innerHTML = `<div class="meta">${m.sender} · ${m.timestamp||''}</div>
-        <div class="text">${(m.text||'').replace(/</g,'&lt;')}</div>
-        <button class="btn small use-btn">Als Beispiel für Anlernen nutzen</button>`;
-      div.querySelector('button').onclick = ()=>{
-        document.getElementById('learn-text').value = m.text;
+    if (!list.length) { el.innerHTML = '<p style="font-size:11px;color:var(--tx2)">Noch keine SMS empfangen.</p>'; return; }
+    el.innerHTML = list.map(m =>
+      '<div class="candidate" style="cursor:default;">' +
+      '<div class="cl">' + m.sender + ' &middot; ' + (m.timestamp || '') + (m.parsed ? ' \u2713' : ' \u26a0') + '</div>' +
+      '<div class="cv" style="white-space:pre-wrap;word-break:break-word;">' + (m.text||'').replace(/</g,'&lt;') + '</div>' +
+      '<button class="sms-btn" style="margin-top:6px;" data-learn-text="' + esc(m.text) + '">Als Beispiel nutzen</button>' +
+      '</div>'
+    ).join('');
+    el.querySelectorAll('[data-learn-text]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.getElementById('learn-text').value = btn.dataset.learnText;
+        closeInboxModal();
         openLearnModal();
-      };
-      el.appendChild(div);
+      });
     });
   });
 }
-
-// ── Kartenmarkierungen ────────────────────────────────────────────
-let addingMarker = false;
-function startAddMarker(){
-  addingMarker = true;
-  alert('Klicke auf die Karte, um einen Marker zu platzieren.');
+function fetchSmsTracks() {
+  fetch('/api/sms/tracks').then(r => r.json()).then(tracks => {
+    updateSmsMarkers(tracks);
+    document.getElementById('s-sms').textContent = Object.values(tracks).reduce((n, t) => n + (t.points||[]).length, 0);
+    if (activeTab === 'sms') { renderSmsList(); document.getElementById('list-cnt').textContent = Object.keys(tracks).length + ' Absender'; }
+  }).catch(() => {});
 }
-map.on('click', e=>{
-  if (!addingMarker) return;
-  addingMarker = false;
-  const label = prompt('Beschriftung für diesen Marker (optional):', '') || '';
-  const color = '#38bdf8';
-  fetch('/api/annotations', {method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({type:'marker', color:color, label:label,
-                          geometry:{lat:e.latlng.lat, lon:e.latlng.lng}})})
-    .then(r=>r.json());
+
+// ══════════════════════════════════════════════════════════
+// DATA UPDATE
+// ══════════════════════════════════════════════════════════
+function handleUpdate(data) {
+  if (data.annotations) loadAnnotations(data.annotations);
+
+  adsbList = data.adsb || [];
+  flarmList = data.flarm || [];
+  starlinkList = data.starlink || [];
+  if (data.sms_tracks) smsTracks = data.sms_tracks;
+
+  document.getElementById('s-adsb').textContent = adsbList.length;
+  document.getElementById('s-flarm').textContent = flarmList.length;
+  document.getElementById('s-starlink').textContent = starlinkList.length;
+  document.getElementById('s-sms').textContent = Object.values(smsTracks).reduce((n, t) => n + (t.points||[]).length, 0);
+
+  if (data.adsb_status) updateAdsbBadge(data.adsb_status);
+  if (data.flarm_status) updateFlarmBadge(data.flarm_status);
+  if (data.starlink_status) updateStarlinkBadge(data.starlink_status);
+  if (data.sms_status) updateSmsBadge(data.sms_status);
+  updateSystemStatus(true);
+
+  updateAdsbMarkers(adsbList);
+  updateFlarmMarkers(flarmList);
+  updateStarlinkMarkers(starlinkList);
+  updateSmsMarkers(smsTracks);
+
+  if (activeTab === 'adsb') { renderAdsbList(); document.getElementById('list-cnt').textContent = adsbList.length; }
+  else if (activeTab === 'flarm') { renderFlarmList(); document.getElementById('list-cnt').textContent = flarmList.length; }
+  else if (activeTab === 'starlink') { renderStarlinkList(); document.getElementById('list-cnt').textContent = starlinkList.length; }
+  else { renderSmsList(); document.getElementById('list-cnt').textContent = Object.keys(smsTracks).length + ' Absender'; }
+
+  if (selId && selType === 'adsb') { const a = adsbList.find(x => (x.icao||x.callsign) === selId); if (a) showAdsbDetail(a); }
+  if (selId && selType === 'starlink') { const s = starlinkList.find(x => x.norad_id === selId); if (s) showStarlinkDetail(s); }
+  if (selId && selType === 'flarm') { const f = flarmList.find(x => x.ogn_id === selId); if (f) showFlarmDetail(f); }
+  if (selId && selType === 'sms' && smsTracks[selId]) { showSmsDetail(smsTracks[selId]); }
+}
+
+// ══════════════════════════════════════════════════════════
+// WEBSOCKET + POLLING FALLBACK
+// ══════════════════════════════════════════════════════════
+const sock = io({ transports: ['polling'] });
+sock.on('connect', () => console.log('WebSocket verbunden'));
+sock.on('disconnect', () => { toast('Verbindung verloren \u2026', 'tlost'); updateSystemStatus(false); });
+sock.on('full_update', data => handleUpdate(data));
+sock.on('sms_point', data => { fetchSmsTracks(); if (document.getElementById('inbox-modal').classList.contains('open')) refreshInbox(); });
+sock.on('annotations_update', list => loadAnnotations(list));
+
+async function poll() {
+  if (sock.connected) return;
+  try {
+    const [ar, fl, sl, st, sm] = await Promise.all([
+      fetch('/api/adsb').then(r => r.json()),
+      fetch('/api/flarm').then(r => r.json()),
+      fetch('/api/starlink').then(r => r.json()),
+      fetch('/api/stats').then(r => r.json()),
+      fetch('/api/sms/tracks').then(r => r.json())
+    ]);
+    handleUpdate({ adsb: ar, flarm: fl, starlink: sl, sms_tracks: sm,
+                   adsb_status: st.adsb_status, flarm_status: st.flarm_status,
+                   starlink_status: st.starlink_status, sms_status: st.sms_status });
+  } catch (e) { /* still */ }
+}
+setInterval(poll, 3000);
+
+Promise.all([
+  fetch('/api/adsb').then(r => r.json()),
+  fetch('/api/flarm').then(r => r.json()),
+  fetch('/api/starlink').then(r => r.json()),
+  fetch('/api/stats').then(r => r.json()),
+  fetch('/api/sms/tracks').then(r => r.json())
+]).then(([ar, fl, sl, st, sm]) => {
+  handleUpdate({ adsb: ar, flarm: fl, starlink: sl, sms_tracks: sm,
+                 adsb_status: st.adsb_status, flarm_status: st.flarm_status,
+                 starlink_status: st.starlink_status, sms_status: st.sms_status });
 });
-function renderAnnotations(list){
-  annotationLayer.clearLayers();
-  const el = document.getElementById('annotation-list');
-  el.innerHTML = '';
-  list.forEach(a=>{
-    if (a.type==='marker'){
-      L.marker([a.geometry.lat, a.geometry.lon], {icon:dotIcon(a.color,10)})
-        .bindPopup(a.label||'Markierung').addTo(annotationLayer);
-    }
-    const row = document.createElement('div');
-    row.className = 'sender-item';
-    row.innerHTML = `<span class="sender-swatch" style="background:${a.color}"></span>
-      <span class="sender-num">${a.label||'(ohne Beschriftung)'}</span>
-      <button class="btn small danger">✕</button>`;
-    row.querySelector('button').onclick = ()=>{
-      fetch('/api/annotations/'+a.id, {method:'DELETE'}).then(()=>refreshAnnotations());
-    };
-    el.appendChild(row);
-  });
-}
-function refreshAnnotations(){ fetch('/api/annotations').then(r=>r.json()).then(renderAnnotations); }
-refreshAnnotations();
-
-// ── Suche (Koordinaten oder Adresse) ─────────────────────────────
-function parseCoordinates(text){
-  const m = text.match(/(-?\d{1,3}\.\d+)[,;\s]+(-?\d{1,3}\.\d+)/);
-  if (m) return {lat:parseFloat(m[1]), lon:parseFloat(m[2])};
-  return null;
-}
-function doSearch(){
-  const text = document.getElementById('search-input').value.trim();
-  if (!text) return;
-  const coords = parseCoordinates(text);
-  if (coords){ map.setView([coords.lat, coords.lon], 13); return; }
-  fetch('/api/geocode?q='+encodeURIComponent(text)).then(r=>r.json()).then(res=>{
-    if (res.ok) map.setView([res.lat, res.lon], 14);
-    else alert(res.error || 'Keine Ergebnisse.');
-  });
-}
-document.getElementById('search-input').addEventListener('keydown', e=>{ if(e.key==='Enter') doSearch(); });
-
-// ── Viewport-Updates an den Server (für ADS-B/Starlink-Umkreis) ──
-function reportViewport(){
-  const c = map.getCenter();
-  const b = map.getBounds();
-  fetch('/api/viewport', {method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({lat:c.lat, lon:c.lng,
-      radius_km: c.distanceTo(b.getNorthEast())/1000,
-      bbox: {lamin:b.getSouth(), lamax:b.getNorth(), lomin:b.getWest(), lomax:b.getEast()}})});
-}
-map.on('moveend', reportViewport);
-reportViewport();
-
-// ── WebSocket-Updates ─────────────────────────────────────────────
-function applyStatus(prefix, status, extraText){
-  const dot = document.getElementById('dot-'+prefix), txt = document.getElementById('txt-'+prefix);
-  if (!dot) return;
-  if (status.active && status.last_success_ts) { dot.className='status-dot ok'; }
-  else if (status.active) { dot.className='status-dot wait'; }
-  else { dot.className='status-dot'; }
-  txt.textContent = extraText || (status.last_error || (status.active ? 'aktiv' : 'deaktiviert'));
-}
-
-socket.on('full_update', data=>{
-  if (data.adsb) renderAdsb(data.adsb);
-  if (data.adsb_status) applyStatus('adsb', data.adsb_status);
-  if (data.flarm) renderFlarm(data.flarm);
-  if (data.flarm_status) applyStatus('flarm', data.flarm_status);
-  if (data.starlink) renderStarlink(data.starlink);
-  if (data.starlink_status) applyStatus('starlink', data.starlink_status,
-    data.starlink_status.satellite_count ? data.starlink_status.satellite_count+' Bahnelemente geladen' : null);
-  if (data.sms_tracks) renderSmsTracks(data.sms_tracks);
-  if (data.sms_format) refreshSmsFormat();
-  if (data.annotations) renderAnnotations(data.annotations);
-});
-
-socket.on('sms_point', data=>{
-  refreshSmsTracks();
-  if (document.getElementById('inbox-list').style.display!=='none') refreshInbox();
-});
-
-socket.on('annotations_update', renderAnnotations);
 </script>
 </body>
 </html>

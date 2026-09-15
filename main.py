@@ -18,8 +18,8 @@ angeschlossenes GSM-Modem (SIM800/900/7600-kompatibel), siehe
 sms_gateway.py.
 """
 
-OVERWATCH_VERSION = "1.0.2"
-OVERWATCH_BUILD_NOTE = "fix-macos-silent-stdout-crash-and-arm64-only-workflow"
+OVERWATCH_VERSION = "1.0.3"
+OVERWATCH_BUILD_NOTE = "port-original-ui-dark-theme-terminal-launcher"
 
 import sys, os, json, time, math, socket, logging, threading, sqlite3
 import argparse, platform, traceback, requests, uuid
@@ -967,18 +967,38 @@ def api_flarm():
 def api_viewport():
     """Wird vom Frontend bei jedem Kartenschwenk/-zoom aufgerufen -- passt
     Mittelpunkt/Radius/Bounding-Box der ADS-B- und Starlink-Abfragen an
-    den sichtbaren Kartenausschnitt an."""
+    den sichtbaren Kartenausschnitt an.
+
+    Erwartet JSON: {"lat":.., "lon":.., "radius_km":..,
+                    "bounds": {"lamin":..,"lamax":..,"lomin":..,"lomax":..}}
+    ("bounds" optional -- wird für exakte Abdeckung bei OpenSky/Starlink
+    genutzt). Schema 1:1 identisch zum Vorgängerprojekt OverWatchMK1
+    übernommen, damit das dortige Frontend unverändert wiederverwendet
+    werden kann (siehe CHANGELOG.md [1.0.3])."""
+    if not adsb_rx and not starlink_rx:
+        return jsonify({"ok": False, "error": "Weder ADS-B noch Starlink aktiv"}), 503
     data = request.get_json(silent=True) or {}
     lat = data.get("lat"); lon = data.get("lon")
     if lat is None or lon is None:
         return jsonify({"ok": False, "error": "lat/lon erforderlich"}), 400
-    radius_km = data.get("radius_km")
-    bbox = data.get("bbox")
-    if adsb_rx:
-        adsb_rx.update_viewport(lat, lon, radius_km=radius_km, bbox=bbox)
-    if starlink_rx:
-        starlink_rx.update_viewport(lat, lon, bbox=bbox)
-    return jsonify({"ok": True})
+    try:
+        lat = float(lat); lon = float(lon)
+        if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+            return jsonify({"ok": False, "error": "lat/lon außerhalb gültigem Bereich"}), 400
+        radius_km = data.get("radius_km")
+        if radius_km is not None:
+            radius_km = float(radius_km)
+        bounds = data.get("bounds")
+        bbox = None
+        if isinstance(bounds, dict) and all(k in bounds for k in ("lamin", "lamax", "lomin", "lomax")):
+            bbox = {k: float(bounds[k]) for k in ("lamin", "lamax", "lomin", "lomax")}
+        if adsb_rx:
+            adsb_rx.update_viewport(lat, lon, radius_km=radius_km, bbox=bbox)
+        if starlink_rx:
+            starlink_rx.update_viewport(lat, lon, bbox=bbox)
+        return jsonify({"ok": True})
+    except (TypeError, ValueError) as e:
+        return jsonify({"ok": False, "error": f"Ungültige Werte: {e}"}), 400
 
 
 @app.route("/api/stats")

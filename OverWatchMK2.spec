@@ -109,23 +109,18 @@ exe = EXE(
     entitlements_file=None,
 )
 
-# Auf macOS zusätzlich ein doppelklickbares .app-Bundle erzeugen.
-# console=True oben bleibt bewusst bestehen (auch im .app-Bundle) --
-# die Diagnose-/Log-Ausgaben (siehe _print_startup_diagnostics() in
-# main.py) sollen beim ersten Start sichtbar sein, falls z.B. das
-# Modem für die SMS-Ortung nicht gefunden wird. Ein Terminalfenster
-# öffnet sich beim Start des .app-Bundles entsprechend mit.
-if sys.platform == 'darwin':
-    app = BUNDLE(
-        exe,
-        name='OverWatchMK2.app',
-        icon=None,
-        bundle_identifier='de.overwatchmk2.app',
-        info_plist={
-            'CFBundleName': 'OverWatchMK2',
-            'CFBundleDisplayName': 'OverWatchMK2',
-            'CFBundleShortVersionString': '1.0.2',
-            'NSHighResolutionCapable': True,
-            'LSBackgroundOnly': False,
-        },
-    )
+# WICHTIG (seit 1.0.3, siehe CHANGELOG.md): Auf macOS wird HIER bewusst
+# KEIN automatisches BUNDLE()-.app mehr erzeugt. Ein von PyInstallers
+# BUNDLE() gebautes .app startet beim Finder-Doppelklick OHNE jedes
+# sichtbare Fenster/Terminal (macOS hängt GUI-gestarteten Prozessen
+# grundsätzlich kein Terminal an) -- das Programm lief dann zwar
+# korrekt im Hintergrund, ließ sich aber nur über die Aktivitätsanzeige
+# wieder beenden (Nutzeranforderung: "mit einem Terminal laufen, damit
+# man es einfacher wieder beenden kann"). Der GitHub-Actions-Workflow
+# (.github/workflows/build.yml, Job build-macos) baut das .app-Bundle
+# deshalb selbst, um ein kleines Start-Skript als CFBundleExecutable
+# einzusetzen, das beim Doppelklick ein sichtbares Terminal-Fenster
+# öffnet und darin DIESES hier erzeugte onefile-Binary ausführt --
+# Strg+C oder Schließen des Fensters beendet das Programm dann wie
+# gewohnt. Unter Windows/Linux ist 'exe' oben bereits das fertige
+# Endprodukt, keine weitere Verpackung nötig.

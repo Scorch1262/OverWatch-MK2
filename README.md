@@ -30,6 +30,11 @@ RTL-SDR, lokaler C-ITS-Empfang) wurde entfernt -- siehe
 - **Offline-Karte** -- eine `.mbtiles`-Datei direkt neben der
   exe/.app wird automatisch erkannt und als Offline-Kartenebene
   angeboten.
+- **Dunkles Kartendesign** und Kartendarstellung/Symbole für ADS-B und
+  FLARM identisch zum Vorgängerprojekt OverWatchMK1 übernommen --
+  inklusive Flugbahn-/Prognose-Linien, Satelliten-Bodenspuren und
+  einzeln ein-/ausblendbarer Ebenen (ADS-B, FLARM, Starlink,
+  SMS-Ortung, No-Fly-Zonen).
 - **No-Fly-Zonen** (Deutschland, dipul/DFS) und **Adress-/
   Koordinatensuche** (Nominatim).
 - Im gesamten lokalen Netzwerk erreichbar (Handy, Tablet, anderer PC).

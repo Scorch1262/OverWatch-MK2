@@ -13,14 +13,20 @@
 3. **macOS:** `OverWatchMK2.app` per Rechtsklick -> "Öffnen" starten
    (siehe Abschnitt 6 zu Gatekeeper -- ein normaler Doppelklick schlägt
    beim allerersten Start fehl, da das Programm nicht kostenpflichtig
-   von Apple signiert ist). Ein Terminalfenster öffnet sich mit
-   Diagnose-/Log-Ausgaben.
+   von Apple signiert ist). Dabei öffnet sich automatisch ein
+   Terminal-Fenster, in dem OverWatchMK2 läuft und seine Diagnose-/
+   Log-Ausgaben zeigt -- bewusst so eingerichtet (siehe CHANGELOG.md
+   [1.0.3]), damit sich das Programm jederzeit einfach per `Strg+C`
+   oder durch Schließen dieses Fensters wieder beenden lässt, statt nur
+   über die Aktivitätsanzeige.
 4. Die im Konsolen-/Terminalfenster angezeigte Adresse
    (z.B. `http://192.168.1.42:8080`) im Browser öffnen -- funktioniert
    von JEDEM Gerät im selben Netzwerk aus, nicht nur vom Rechner, auf
    dem OverWatchMK2 läuft.
-5. Zum Beenden das Konsolen-/Terminalfenster schließen oder `Strg+C`
-   (macOS: `Cmd+C`) drücken.
+5. Zum Beenden das Konsolen-/Terminalfenster schließen oder darin
+   `Strg+C` drücken (auch unter macOS `Strg+C`, NICHT `Cmd+C` --
+   Terminal-Fenster verwenden dieselbe Tastenkombination wie überall
+   sonst auch).
 
 ## 2. Konfiguration (`config.yaml`)
 
@@ -165,27 +171,28 @@ Falls Rechtsklick -> "Öffnen" nichts bringt (kein Fenster, kein
 Terminal, das Dock-Symbol hüpft kurz und verschwindet wieder, oder es
 passiert optisch gar nichts), der Reihe nach prüfen:
 
-1. **Seit Version 1.0.2 behoben:** Genau dieses Symptom (Dock-Icon
-   hüpft kurz, Programm verschwindet sofort wieder, keine Fehlermeldung)
-   hatte bis Version 1.0.1 eine konkrete Ursache -- wenn die App per
-   Finder-Doppelklick statt aus dem Terminal gestartet wird, hängt
-   macOS ihr kein Terminal an; `sys.stdout`/`sys.stderr` waren dann
-   `None`, und die allererste Diagnoseausgabe des Programms stürzte
-   sofort ab, bevor irgendetwas anderes passieren konnte. Ab 1.0.2
-   fängt das Programm das selbst ab und schreibt die Diagnoseausgabe
-   stattdessen in `overwatchmk2_console.log` DIREKT NEBEN der `.app`.
-   Tritt das Problem nach einem Update auf 1.0.2 weiterhin auf: diese
-   Datei öffnen -- sie enthält die tatsächliche Fehlermeldung.
+1. **Seit Version 1.0.3 baut sich die App ihr eigenes, sichtbares
+   Terminal-Fenster beim Start** (siehe CHANGELOG.md [1.0.3]) -- ein
+   komplett unsichtbarer, im Hintergrund laufender Start ohne jedes
+   Fenster sollte damit nicht mehr vorkommen. Falls trotzdem nichts
+   sichtbar passiert: möglicherweise blockiert eine
+   Sicherheitssoftware/ein MDM-Profil das automatische Öffnen von
+   Terminal.app durch andere Apps (`osascript`/AppleEvents) -- dann
+   hilft Schritt 3 unten als direkter Test ohne den Terminal-Umweg.
+   (Bis Version 1.0.1 gab es hier tatsächlich einen Absturz durch
+   `sys.stdout`/`sys.stderr` = `None` bei fensterlosem GUI-Start --
+   seit 1.0.2/1.0.3 durch das sichtbare Terminal-Fenster gegenstandslos.)
 2. **Ausführungsrecht fehlt.** Kommt vor, wenn das Zip nicht mit dem
    normalen macOS-"Entpacken" (Doppelklick/Archivierungsprogramm)
    sondern z.B. mit einem Cloud-Sync-Tool entpackt wurde. Prüfen/beheben:
    ```
    chmod +x OverWatchMK2.app/Contents/MacOS/OverWatchMK2
+   chmod +x OverWatchMK2.app/Contents/MacOS/OverWatchMK2-bin
    ```
-3. **Über das Terminal starten, um die echte Fehlermeldung sofort zu
-   sehen** (unabhängig von `overwatchmk2_console.log`):
+3. **Direkt starten, um die echte Fehlermeldung sofort zu sehen**
+   (umgeht den Terminal-Launcher komplett):
    ```
-   ./OverWatchMK2.app/Contents/MacOS/OverWatchMK2
+   ./OverWatchMK2.app/Contents/MacOS/OverWatchMK2-bin
    ```
    Das gibt entweder die normalen Start-Diagnosezeilen aus (dann läuft
    es tatsächlich -- die Adresse steht in der Ausgabe) oder den

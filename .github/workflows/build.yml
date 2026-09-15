@@ -89,27 +89,79 @@ jobs:
         run: |
           python -m py_compile main.py sms_gateway.py ogn_receiver.py
 
-      - name: PyInstaller Build (OverWatchMK2.app)
+      - name: PyInstaller Build (onefile-Binary)
         run: pyinstaller --clean --noconfirm OverWatchMK2.spec
+
+      - name: .app-Bundle mit Terminal-Startskript bauen
+        run: |
+          # Siehe CHANGELOG.md [1.0.3] / OverWatchMK2.spec: PyInstallers
+          # eigenes BUNDLE() würde ein .app erzeugen, das beim Finder-
+          # Doppelklick OHNE sichtbares Fenster/Terminal im Hintergrund
+          # läuft -- schwer wieder zu beenden. Stattdessen wird das .app
+          # hier von Hand zusammengesetzt: CFBundleExecutable ist ein
+          # kleines Start-Skript, das ein sichtbares Terminal-Fenster
+          # öffnet und darin das eigentliche Programm ausführt.
+          APP="dist_app/OverWatchMK2.app"
+          mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+
+          # Eigentliches Programm, umbenannt damit es sich klar vom
+          # Start-Skript unterscheidet (beide liegen im selben Ordner).
+          cp dist/OverWatchMK2 "$APP/Contents/MacOS/OverWatchMK2-bin"
+          chmod +x "$APP/Contents/MacOS/OverWatchMK2-bin"
+
+          cat > "$APP/Contents/MacOS/OverWatchMK2" << 'LAUNCHER'
+          #!/bin/bash
+          # OverWatchMK2 -- Terminal-Startskript (siehe CHANGELOG.md [1.0.3]).
+          # Wird beim Doppelklick auf die .app als CFBundleExecutable
+          # aufgerufen. Öffnet ein sichtbares Terminal-Fenster und startet
+          # darin das eigentliche Programm -- so lässt es sich jederzeit
+          # per Strg+C oder Schließen des Fensters wieder beenden, statt
+          # nur über die Aktivitätsanzeige.
+          DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+          BIN="$DIR/OverWatchMK2-bin"
+          osascript <<APPLESCRIPT
+          tell application "Terminal"
+              activate
+              do script "\"$BIN\"; exit"
+          end tell
+          APPLESCRIPT
+          LAUNCHER
+          chmod +x "$APP/Contents/MacOS/OverWatchMK2"
+
+          cat > "$APP/Contents/Info.plist" << PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>CFBundleName</key><string>OverWatchMK2</string>
+              <key>CFBundleDisplayName</key><string>OverWatchMK2</string>
+              <key>CFBundleExecutable</key><string>OverWatchMK2</string>
+              <key>CFBundleIdentifier</key><string>de.overwatchmk2.app</string>
+              <key>CFBundlePackageType</key><string>APPL</string>
+              <key>CFBundleShortVersionString</key><string>1.0.3</string>
+              <key>NSHighResolutionCapable</key><true/>
+          </dict>
+          </plist>
+          PLIST
 
       - name: Ausführungsrechte + Quarantäne-Attribut prüfen
         run: |
-          # Sicherstellen, dass das eigentliche Binary in Contents/MacOS/
-          # ausführbar ist -- PyInstaller setzt das zwar selbst, aber
-          # nachfolgende Zip-/Artefakt-Schritte können das Bit unter
-          # Umständen verlieren, siehe bekannte Probleme mit
+          # Sicherstellen, dass beide Binaries in Contents/MacOS/
+          # ausführbar sind -- nachfolgende Zip-/Artefakt-Schritte können
+          # das Bit unter Umständen verlieren, siehe bekannte Probleme mit
           # actions/upload-artifact und Unix-Rechten. Direkt nach dem
-          # Bauen (also VOR jedem Zip-/Upload-Schritt) explizit setzen,
-          # damit es garantiert im Archiv landet.
-          chmod +x "dist/OverWatchMK2.app/Contents/MacOS/OverWatchMK2"
-          ls -la "dist/OverWatchMK2.app/Contents/MacOS/"
-          file "dist/OverWatchMK2.app/Contents/MacOS/OverWatchMK2"
-          xattr -cr "dist/OverWatchMK2.app" || true
+          # Bauen (also VOR jedem Zip-/Upload-Schritt) nochmal explizit
+          # setzen, damit es garantiert im Archiv landet.
+          chmod +x "dist_app/OverWatchMK2.app/Contents/MacOS/OverWatchMK2"
+          chmod +x "dist_app/OverWatchMK2.app/Contents/MacOS/OverWatchMK2-bin"
+          ls -la "dist_app/OverWatchMK2.app/Contents/MacOS/"
+          file "dist_app/OverWatchMK2.app/Contents/MacOS/OverWatchMK2-bin"
+          xattr -cr "dist_app/OverWatchMK2.app" || true
 
       - name: Release-Paket zusammenstellen
         run: |
           mkdir -p release_macos
-          cp -R dist/OverWatchMK2.app release_macos/
+          cp -R dist_app/OverWatchMK2.app release_macos/
           cp config.yaml release_macos/
           cp README.md release_macos/
           cp ANLEITUNG.md release_macos/

@@ -1,5 +1,191 @@
 # OverWatchMK2 – Changelog
 
+## [1.0.3] – Oberfläche 1:1 aus OverWatchMK1 übernommen; macOS startet jetzt mit sichtbarem Terminal
+
+### Auftrag / Nutzeranforderung
+
+1. ADS-B- und FLARM-Daten sollen genau so dargestellt werden wie im
+   Ursprungsprojekt OverWatchMK1.
+2. Die Karte soll ebenfalls im dunklen Kartenthema des Ursprungsprojekts
+   angezeigt werden.
+3. Die einzelnen Ebenen sollen weiterhin einzeln ein- und ausblendbar
+   bleiben.
+4. Das Python-Programm soll mit einem Terminal laufen, damit es sich
+   leichter wieder beenden lässt.
+5. Die gesamte Ansicht (nicht nur einzelne Elemente) soll aus dem
+   Ursprungsprojekt übernommen werden.
+
+### Änderungen: Frontend (`templates/index.html`, komplett neu aus OverWatchMK1 portiert)
+
+Das seit [1.0.0] verwendete, selbst geschriebene, deutlich einfachere
+Frontend wurde vollständig durch eine direkte Portierung der
+OverWatchMK1-Oberfläche (Version 2.0.11) ersetzt -- nicht nachgebaut,
+sondern Layout, CSS-Design-Tokens, Icon-/Popup-/Trail-Logik für
+ADS-B/FLARM/Starlink sowie das komplette Kartenmarkierungs-Werkzeug
+wortwörtlich übernommen, nur um die in [1.0.0] entfernten
+Datenquellen (Drohnen-Remote-ID, C-ITS, lokale Wi-Fi/Bluetooth-Scanner)
+bereinigt und um einen neuen SMS-Tab im selben Baukasten ergänzt.
+
+- **ADS-B:** `adsbAircraftShape()` (je Emitter-Kategorie unterschiedliche
+  Symbole -- Hubschrauber/Segelflugzeug/Ballon/Fallschirm/UAV/Standard-
+  Flugzeug), `adsbIcon()`, `adsbPopup()`, `updateAdsbMarkers()`
+  (inklusive 40-Punkte-Flugbahn-Trail und geradliniger 3-Minuten-
+  Kursprognose-Linie basierend auf Heading+Speed) 1:1 übernommen.
+  Einzige inhaltliche Anpassung: die lokal/Internet-Farbunterscheidung
+  (Amber vs. Blau) aus OverWatchMK1 entfällt, da OverWatchMK2 nach
+  [1.0.0] ausschließlich Internet-Quellen hat -- ADS-B-Symbole sind
+  jetzt einheitlich Blau (`#0ea5e9`/`#38bdf8` ausgewählt), FLARM
+  einheitlich Gelb (`#eab308`), exakt die Farben, die OverWatchMK1
+  zuvor für "Internet-Quelle" nutzte.
+- **FLARM:** `flarmAircraftShape()` (Helikopter/Segelflugzeug/Ballon/
+  Fallschirm/UAV/Standard), `flarmIcon()`, `flarmPopup()`,
+  `updateFlarmMarkers()` 1:1 übernommen (gleiche Anpassung: keine
+  lokal/Internet-Unterscheidung mehr nötig).
+- **Starlink:** `starlinkIcon()` (Satelliten-Symbol mit Solarpanel-
+  Flügeln), `starlinkPopup()`, `updateStarlinkMarkers()` inklusive
+  mehrsegmentiger Bodenspur-Polylinien (Datumsgrenzen-Behandlung) 1:1
+  übernommen -- war in OverWatchMK1 bereits ein reiner Online-Dienst,
+  daher unverändert übertragbar.
+- **Dunkles Kartenthema:** exakter Original-CSS-Filter übernommen --
+  `.leaflet-tile { filter: brightness(.38) contrast(1.3) saturate(.5)
+  hue-rotate(200deg); }` -- plus alle zugehörigen dunklen Leaflet-
+  Popup-/Zoom-Control-/Attribution-Stile und die komplette
+  IBM-Plex-Mono/-Sans-Typografie samt Farb-Tokens (`--c0`..`--c4`,
+  `--acc`, `--am2`, `--pu2`, ...).
+- **Ebenen weiterhin einzeln umschaltbar:** das bodenrechte
+  `#layer-toggle`-Button-Panel (`toggleLayer()`) aus OverWatchMK1 1:1
+  übernommen -- jetzt mit vier Schaltern (ADS-B, FLARM, Starlink,
+  SMS-Ortung) statt der bisherigen neun (Drohnen/Piloten/Trails/
+  Richtung/ADS-B/Starlink/C-ITS-Fahrzeuge/C-ITS-Warnungen/FLARM).
+- **Restliche generische Bausteine unverändert 1:1 übernommen:**
+  automatischer Online/Offline-Kartenwechsel inkl. Bundesländer-
+  Umriss-Fallback (`switchToOfflineMap()`/`switchToOnlineMap()`,
+  `static/offline/germany_bundeslaender.geo.json` neu mit ins Projekt
+  aufgenommen), No-Fly-Zonen-WMS-Ebene (`toggleNoFlyZones()`),
+  Kachel-Wiederholungsversuch bei Fehlern (`attachTileRetry()`),
+  Koordinaten-/Adresssuche (`parseCoordinates()`/`performGeoSearch()`,
+  DMS/Dezimalgrad-Erkennung), Standort-Button (`locateUser()`),
+  Eck-Rahmen/Karten-Infobox/Koordinatenanzeige, Toast-Benachrichtigungen,
+  und das komplette Kartenmarkierungs-Werkzeug (Marker/Kreis/Rechteck/
+  Streckenmessung, `annotSetTool()`/`annotCreate()`/`measureAddPoint()`
+  usw.) -- keines dieser Features war drohnen-/C-ITS-spezifisch, alle
+  vollständig wiederverwendbar.
+- **Neuer SMS-Tab im selben Baukasten:** eigene Icon-/Popup-/Marker-
+  Verwaltung (`smsIcon()`, `smsPopup()`, `updateSmsMarkers()`) nach
+  demselben Muster wie ADS-B/FLARM/Starlink, plus Listendarstellung
+  (`renderSmsList()`, neue `.smi`-CSS-Klasse nach Vorbild von `.ai`/
+  `.si`) und Detail-Panel (`showSmsDetail()`) im selben `dsec`/`dgrid`-
+  Baukasten wie die übrigen Detail-Ansichten. Anlern-/Inbox-Dialoge
+  als neue, aber stiltreue (gleiche Farb-Tokens/Typografie) Modals.
+- **Vereinfacht gegenüber OverWatchMK1 (bewusst, da gegenstandslos):**
+  keine Tabs/Listen mehr für Drohnen, C-ITS, "Mögliche Drohnen-WLANs";
+  kein Filter-Leiste (war drohnen-spezifisch); keine CPU-Temperatur-
+  Anzeige, kein Buzzer-Button, kein Shutdown-Button (alle drei
+  Raspberry-Pi-spezifisch bzw. in [1.0.0] bereits entfernt).
+
+### Änderungen: Backend (`main.py`)
+
+- **`/api/viewport` erwartet jetzt exakt dasselbe JSON-Schema wie
+  OverWatchMK1** (`{"bounds": {"lamin":..,"lamax":..,"lomin":..,"lomax":..}}`
+  statt des zuvor abweichenden `"bbox"`-Feldnamens) -- Voraussetzung
+  dafür, dass das portierte Frontend (`reportViewport()`) unverändert
+  funktioniert. Gleichzeitig die Validierung aus OverWatchMK1
+  übernommen (lat/lon-Bereichsprüfung, 503 falls weder ADS-B noch
+  Starlink aktiv sind).
+- Keine sonstigen Backend-Änderungen -- die bestehenden `/api/adsb`,
+  `/api/flarm`, `/api/starlink`, `/api/sms/*`, `/api/annotations`,
+  `/api/offline_tiles/*`, `/api/noflyzones/config`, `/api/geocode`
+  Endpunkte liefern bereits exakt die Datenformen, die das portierte
+  Frontend erwartet (icao/callsign/lat/lon/alt_m/speed_kmh/heading/...
+  für ADS-B; ogn_id/aircraft_type/course_deg/... für FLARM;
+  norad_id/name/ground_track/... für Starlink).
+
+### Änderungen: macOS-Start jetzt mit sichtbarem Terminal-Fenster
+
+- **`OverWatchMK2.spec`:** die automatische PyInstaller-`BUNDLE()`-
+  Stufe für macOS (seit [1.0.0] vorhanden) wurde entfernt. Sie erzeugte
+  ein `.app`, das beim Finder-Doppelklick OHNE jedes sichtbare Fenster
+  im Hintergrund lief -- korrekt funktionsfähig, aber nur über die
+  Aktivitätsanzeige wieder zu beenden, was der Nutzeranforderung
+  widerspricht.
+- **`.github/workflows/build.yml` (Job `build-macos`):** baut das
+  `.app`-Bundle jetzt selbst von Hand zusammen. `CFBundleExecutable`
+  ist ein kleines, mitgebautes Start-Skript (`Contents/MacOS/
+  OverWatchMK2`), das per `osascript`/`tell application "Terminal"`
+  ein sichtbares Terminal-Fenster öffnet und darin das eigentliche,
+  umbenannte Programm (`Contents/MacOS/OverWatchMK2-bin`) ausführt.
+  Schließen des Fensters oder `Strg+C` darin beendet das Programm wie
+  gewohnt. Der bereits in [1.0.1]/[1.0.2] vorhandene Ausführungsrechte-/
+  Quarantäne-Prüfschritt läuft jetzt gegen beide Dateien
+  (Start-Skript UND das eigentliche Binary).
+- **`ANLEITUNG.md`:** Abschnitt 1 (Schnellstart) und Abschnitt 7
+  (Fehlersuche) entsprechend aktualisiert -- inklusive Korrektur eines
+  bestehenden Fehlers ("macOS: `Cmd+C`" war falsch, Terminal-Fenster
+  nutzen unter macOS ganz normal `Strg+C`, nicht `Cmd+C`).
+- Die in [1.0.2] eingeführte `sys.stdout`/`sys.stderr`-Absicherung in
+  `main.py` bleibt unverändert als Fallback bestehen (z.B. falls
+  `osascript`/Terminal.app durch eine Sicherheitsrichtlinie blockiert
+  wird) -- im Normalfall greift sie ab jetzt aber gar nicht mehr, da
+  immer ein echtes Terminal angehängt ist.
+
+### Verifikation
+
+```
+$ python3 -m py_compile main.py sms_gateway.py ogn_receiver.py
+(keine Ausgabe = Erfolg)
+
+$ python3 -c "import yaml; yaml.safe_load(open('.github/workflows/build.yml')); print('YAML OK')"
+YAML OK
+
+$ python3 main.py --version
+OverWatchMK2 1.0.3 (port-original-ui-dark-theme-terminal-launcher)
+
+# Frontend: Flask/Jinja rendert die neue Oberfläche fehlerfrei, alle
+# API-Endpunkte antworten weiterhin wie erwartet:
+$ python3 main.py --no-adsb --no-starlink --no-flarm --no-sms --port 18090
+$ curl -s -o /tmp/index.html -w "HTTP %{http_code}\n" http://127.0.0.1:18090/
+HTTP 200   # 101319 Bytes, enthält "OVERWATCHMK2"-Header, adsbIcon()/
+           # flarmIcon()/smsIcon()-Funktionen und den Original-Dark-
+           # Map-Filter "hue-rotate(200deg)" -- alle per Skript geprüft
+$ curl .../api/adsb .../api/flarm .../api/starlink .../api/sms/tracks \
+       .../api/sms/status .../api/sms/format .../api/sms/inbox \
+       .../api/annotations .../api/offline_tiles/status \
+       .../api/noflyzones/config .../api/stats
+alle -> HTTP 200
+$ curl -X POST .../api/viewport -d '{"lat":51.0,"lon":10.0,"radius_km":50,
+       "bounds":{"lamin":50,"lamax":52,"lomin":9,"lomax":11}}'
+{"ok":false,"error":"Weder ADS-B noch Starlink aktiv"}   # 503, korrekt:
+       # beide bewusst deaktiviert in diesem Testlauf (--no-adsb
+       # --no-starlink) -- bestätigt, dass das neue "bounds"-Schema
+       # ankommt und durch dieselbe Validierung wie OverWatchMK1 läuft
+
+# Eingebettetes JavaScript: mit Node.js syntaktisch geprüft (Jinja-
+# Platzhalter durch Dummy-Literale ersetzt, da Node kein Jinja kennt):
+$ node --check /tmp/extracted.js
+(keine Ausgabe = Erfolg, kein Syntaxfehler in den ca. 1500 Zeilen JS)
+
+# macOS-Bundle-Bauschritt: die exakte, aus der YAML extrahierte
+# Bash-Sequenz syntaktisch UND funktional gegen ein Dummy-Binary
+# ausgeführt (da kein echter macOS-Runner in dieser Umgebung
+# verfügbar ist):
+$ bash -n macos_bundle_step.sh   # -> kein Syntaxfehler
+$ bash macos_bundle_step.sh      # (gegen dist/OverWatchMK2-Dummydatei)
+$ bash -n dist_app/OverWatchMK2.app/Contents/MacOS/OverWatchMK2
+(keine Ausgabe = Erfolg -- das erzeugte Start-Skript selbst ist
+ ebenfalls syntaktisch fehlerfrei)
+$ python3 -c "import plistlib; print(plistlib.load(open('.../Info.plist','rb')))"
+{'CFBundleName': 'OverWatchMK2', ..., 'CFBundleExecutable': 'OverWatchMK2', ...}
+# -> Info.plist ist gültiges, korrekt geparstes XML-plist
+```
+
+Ein echter Build- und Start-Test auf physischer macOS-Hardware
+(insbesondere ob `osascript`/Terminal.app in der GitHub-Actions-
+`macos-14`-Umgebung anstandslos funktioniert) konnte in dieser Linux-
+Entwicklungsumgebung weiterhin nicht durchgeführt werden -- die exakte
+Bash-Sequenz wurde jedoch, wie oben gezeigt, Zeile für Zeile aus der
+tatsächlichen YAML-Datei extrahiert und lokal gegen ein Dummy-Binary
+ausgeführt, nicht nur gelesen/überflogen.
+
 ## [1.0.2] – Fix: macOS-App stürzte beim Finder-Start lautlos ab; CI hing bei nicht mehr existierendem Intel-Runner
 
 ### Problem (Nutzermeldung, zwei getrennte Symptome)
