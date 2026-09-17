@@ -1,5 +1,7 @@
 # OverWatchMK2
 
+![Bild](Bilder.png)
+
 Reiner Online-Anzeiger für ADS-B (Flugzeuge), FLARM/OGN (Segelflieger/
 Kleinflugzeuge) und Starlink-Satelliten, plus SMS-basierten
 Ortungsempfang über ein per USB-UART angeschlossenes GSM-Modem
