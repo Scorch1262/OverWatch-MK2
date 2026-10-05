@@ -18,8 +18,8 @@ angeschlossenes GSM-Modem (SIM800/900/7600-kompatibel), siehe
 sms_gateway.py.
 """
 
-OVERWATCH_VERSION = "1.0.3"
-OVERWATCH_BUILD_NOTE = "port-original-ui-dark-theme-terminal-launcher"
+OVERWATCH_VERSION = "1.1.0"
+OVERWATCH_BUILD_NOTE = "aircraft-route-type-fullpath"
 
 import sys, os, json, time, math, socket, logging, threading, sqlite3
 import argparse, platform, traceback, requests, uuid
@@ -235,6 +235,7 @@ log = logging.getLogger("OverWatchMK2")
 
 # ── FLARM/OGN (Internet-Netzwerk) ─────────────────────────────────
 import ogn_receiver
+import aircraft_info
 from ogn_receiver import OGNInternetClient
 ogn_receiver.set_logger(log)
 
@@ -339,6 +340,9 @@ class ADSBReceiver(threading.Thread):
                             "squawk": str(a.get("squawk", "") or ""),
                             "on_ground": a.get("mlat", []) != [],
                             "category": str(a.get("category", "") or "").upper() or None,
+                            "type_code": str(a.get("t", "") or "").upper() or None,
+                            "registration": str(a.get("r", "") or "").upper() or None,
+                            "type_desc": str(a.get("desc", "") or "") or None,
                             "source": source_label, "last_seen": time.time()})
             except Exception as e:
                 skipped += 1
@@ -951,6 +955,19 @@ def index():
 @app.route("/api/adsb")
 def api_adsb():
     return jsonify(adsb_rx.get_all() if adsb_rx else [])
+
+
+@app.route("/api/aircraft_info/<icao>")
+def api_aircraft_info(icao):
+    """Typ, Registrierung, Start-/Zielflughafen (adsbdb.com, gecacht)."""
+    cs = request.args.get("callsign", "")
+    return jsonify(aircraft_info.get_info(icao, cs))
+
+
+@app.route("/api/aircraft_track/<icao>")
+def api_aircraft_track(icao):
+    """Komplette bisherige Flugbahn des letzten Fluges (adsb.lol, gecacht)."""
+    return jsonify(aircraft_info.get_track(icao))
 
 
 @app.route("/api/starlink")

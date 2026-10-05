@@ -1185,6 +1185,7 @@ function adsbIcon(a, sel) {
   return L.divIcon({ html: svg, className: '', iconSize: [sz,sz], iconAnchor: [sz/2,sz/2], popupAnchor: [0,-sz/2] });
 }
 
+function hesc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function esc(s) { return String(s || '').replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
 
 function bindHoverPopup(marker) {
@@ -1192,10 +1193,24 @@ function bindHoverPopup(marker) {
   marker.on('mouseout',  () => marker.closePopup());
 }
 
+function adsbPopupTypeRoute(a) {
+  const c = a.icao ? acInfoCache[a.icao.toLowerCase()] : null;
+  const info = c && c.info;
+  const ac = info && info.aircraft && info.aircraft.found ? info.aircraft : null;
+  const rt = info && info.route && info.route.found ? info.route : null;
+  const t = (ac && (ac.icao_type || ac.type)) || a.type_code || '';
+  let h = t ? '<div class="lp-row"><span>Typ</span><span class="lp-v">' + hesc(t) + '</span></div>' : '';
+  if (rt) {
+    const code = ap => ap ? (ap.iata || ap.icao || '?') : '?';
+    h += '<div class="lp-row"><span>Route</span><span class="lp-v">' + hesc(code(rt.origin)) + ' → ' + hesc(code(rt.destination)) + '</span></div>';
+  }
+  return h;
+}
 function adsbPopup(a) {
   return '<div style="min-width:170px">' +
     '<div class="lp-title" style="color:var(--am2)">' + (a.callsign || a.icao || '—') + '</div>' +
     '<div class="lp-row"><span>ICAO</span><span class="lp-v">' + (a.icao||'—') + '</span></div>' +
+    adsbPopupTypeRoute(a) +
     '<div class="lp-row"><span>H\u00f6he</span><span class="lp-v">' + (a.alt_m != null ? a.alt_m + ' m' : '—') + '</span></div>' +
     '<div class="lp-row"><span>Speed</span><span class="lp-v">' + (a.speed_kmh != null ? a.speed_kmh + ' km/h' : '—') + '</span></div>' +
     '<div class="lp-row"><span>Heading</span><span class="lp-v">' + (a.heading != null ? a.heading + '\u00b0' : '—') + '</span></div>' +
@@ -1550,6 +1565,7 @@ function selectAdsbById(id) {
   selId = id; selType = 'adsb';
   if (a.lat != null) map.flyTo([a.lat, a.lon], Math.max(map.getZoom(), 12), { duration: 0.8 });
   showAdsbDetail(a);
+  syncFlightPath(true);
   renderAdsbList();
   Object.keys(adsbMarkers).forEach(mid => {
     const aa = adsbList.find(x => (x.icao || x.callsign) === mid);
@@ -1560,7 +1576,7 @@ function selectStarlinkById(id) {
   id = Number(id);
   const s = starlinkList.find(x => x.norad_id === id);
   if (!s) return;
-  selId = id; selType = 'starlink';
+  selId = id; selType = 'starlink'; syncFlightPath();
   if (s.lat != null) map.flyTo([s.lat, s.lon], Math.max(map.getZoom(), 6), { duration: 0.8 });
   showStarlinkDetail(s);
   renderStarlinkList();
@@ -1572,7 +1588,7 @@ function selectStarlinkById(id) {
 function selectFlarmById(id) {
   const item = flarmList.find(x => x.ogn_id === id);
   if (!item) return;
-  selId = id; selType = 'flarm';
+  selId = id; selType = 'flarm'; syncFlightPath();
   if (item.lat != null) map.flyTo([item.lat, item.lon], Math.max(map.getZoom(), 14), { duration: 0.8 });
   showFlarmDetail(item);
   renderFlarmList();
@@ -1584,7 +1600,7 @@ function selectFlarmById(id) {
 function selectSmsById(sender) {
   const track = smsTracks[sender];
   if (!track) return;
-  selId = sender; selType = 'sms';
+  selId = sender; selType = 'sms'; syncFlightPath();
   const pts = track.points || [];
   const last = pts[pts.length - 1];
   if (last) map.flyTo([last.lat, last.lon], Math.max(map.getZoom(), 13), { duration: 0.8 });
@@ -1600,6 +1616,7 @@ window.selectSmsById = selectSmsById;
 function closeDetail() {
   document.getElementById('detail').classList.remove('vis');
   selId = null; selType = null;
+  clearFlightPath();
   renderAdsbList(); renderFlarmList(); renderStarlinkList(); renderSmsList();
   Object.keys(adsbMarkers).forEach(id => {
     const aa = adsbList.find(x => (x.icao || x.callsign) === id);
@@ -1619,6 +1636,116 @@ function closeDetail() {
 // ══════════════════════════════════════════════════════════
 // DETAIL PANELS
 // ══════════════════════════════════════════════════════════
+
+// ══════════════════════════════════════════════════════════
+// FLUGZEUG-ZUSATZINFOS (v1.1.0): Typ, Start/Ziel, komplette Flugbahn
+// ══════════════════════════════════════════════════════════
+const acInfoCache = {};          // icao -> {info, ts, loading}
+let flightPath = { id: null, line: null, marks: [], lastFetch: 0, serverPts: null, loading: false };
+
+function acInfoFor(a) {
+  const icao = (a && a.icao || '').toLowerCase();
+  if (!icao) return null;
+  const c = acInfoCache[icao];
+  const age = c ? (Date.now() - c.ts) : Infinity;
+  const stale = c && !c.loading && ((c.info && c.info.error) ? age > 30000 : age > 600000);
+  if (!c || stale) {
+    acInfoCache[icao] = { info: c ? c.info : null, ts: Date.now(), loading: true };
+    fetch('/api/aircraft_info/' + encodeURIComponent(icao) + '?callsign=' + encodeURIComponent(a.callsign || ''))
+      .then(r => r.json())
+      .then(j => { acInfoCache[icao] = { info: j, ts: Date.now(), loading: false }; refreshAdsbDetailIfSelected(icao); syncFlightPath(true); })
+      .catch(() => { acInfoCache[icao] = { info: { error: true }, ts: Date.now(), loading: false }; refreshAdsbDetailIfSelected(icao); });
+  }
+  return acInfoCache[icao];
+}
+function refreshAdsbDetailIfSelected(icao) {
+  if (selType === 'adsb' && selId && String(selId).toLowerCase() === icao) {
+    const a = adsbList.find(x => (x.icao || x.callsign) === selId);
+    if (a) showAdsbDetail(a);
+  }
+}
+function airportLabel(ap) {
+  if (!ap) return '—';
+  const codes = [ap.icao, ap.iata].filter(Boolean).join(' / ');
+  const where = [ap.city, ap.country].filter(Boolean).join(', ');
+  return hesc((ap.name || '—') + (codes ? ' (' + codes + ')' : '') + (where ? ' – ' + where : ''));
+}
+function acTypeRouteHtml(a) {
+  const c = acInfoFor(a);
+  const info = c && c.info;
+  const ac = info && info.aircraft && info.aircraft.found ? info.aircraft : null;
+  const rt = info && info.route && info.route.found ? info.route : null;
+  const loading = !info || (c && c.loading && !info);
+  const na = loading ? 'lädt…' : 'unbekannt';
+  const typeTxt = ac ? ((ac.manufacturer ? ac.manufacturer + ' ' : '') + (ac.type || '')).trim() : (a.type_desc || '');
+  const code = (ac && ac.icao_type) || a.type_code || '';
+  const reg = (ac && ac.registration) || a.registration || '';
+  let h = '<div class="dsec"><div class="dsec-t">Flugzeug</div><div class="dgrid">' +
+    '<div class="drow full"><div class="dk">Typ</div><div class="dv hi">' + (typeTxt ? hesc(typeTxt) : na) + (code ? ' <span style="opacity:.7">[' + hesc(code) + ']</span>' : '') + '</div></div>' +
+    '<div class="drow"><div class="dk">Kennzeichen</div><div class="dv">' + (reg ? hesc(reg) : '—') + '</div></div>' +
+    '<div class="drow"><div class="dk">Betreiber</div><div class="dv">' + hesc((rt && rt.airline) || (ac && ac.owner) || '—') + '</div></div>' +
+    '</div></div>';
+  h += '<div class="dsec"><div class="dsec-t">Flugroute</div><div class="dgrid">' +
+    '<div class="drow full"><div class="dk">Start</div><div class="dv">' + (rt ? airportLabel(rt.origin) : na) + '</div></div>' +
+    '<div class="drow full"><div class="dk">Ziel</div><div class="dv">' + (rt ? airportLabel(rt.destination) : na) + '</div></div>' +
+    '</div></div>';
+  return h;
+}
+
+function clearFlightPath() {
+  if (flightPath.line) { map.removeLayer(flightPath.line); }
+  flightPath.marks.forEach(m => map.removeLayer(m));
+  flightPath.line = null; flightPath.marks = []; flightPath.id = null;
+  flightPath.serverPts = null; flightPath.lastFetch = 0; flightPath.loading = false;
+}
+function drawFlightPath() {
+  if (!flightPath.id || !layers.adsb) return;
+  const a = adsbList.find(x => (x.icao || x.callsign) === flightPath.id);
+  let pts = (flightPath.serverPts || []).map(p => [p[0], p[1]]);
+  if (!pts.length) {
+    // Fallback: lokal seit Seitenstart gesammelte Spur
+    pts = (adsbTrailPts[flightPath.id] || []).map(p => Array.isArray(p) ? [p[0], p[1]] : [p.lat, p.lon]).filter(p => p[0] != null);
+  }
+  if (a && a.lat != null) pts.push([a.lat, a.lon]);
+  if (pts.length < 2) return;
+  if (!flightPath.line) {
+    flightPath.line = L.polyline(pts, { color: '#f59e0b', weight: 3, opacity: 0.9, lineJoin: 'round', interactive: false }).addTo(map);
+  } else {
+    flightPath.line.setLatLngs(pts);
+  }
+}
+function drawAirportMarks() {
+  flightPath.marks.forEach(m => map.removeLayer(m)); flightPath.marks = [];
+  const c = flightPath.id ? acInfoCache[String(flightPath.id).toLowerCase()] : null;
+  const rt = c && c.info && c.info.route && c.info.route.found ? c.info.route : null;
+  if (!rt || !layers.adsb) return;
+  [['Start', rt.origin], ['Ziel', rt.destination]].forEach(([lbl, ap]) => {
+    if (!ap || ap.lat == null || ap.lon == null) return;
+    const m = L.circleMarker([ap.lat, ap.lon], { radius: 6, color: '#f59e0b', weight: 2, fillColor: '#111', fillOpacity: 0.9 })
+      .bindTooltip(lbl + ': ' + hesc(ap.icao || ap.iata || ap.name || ''), { permanent: true, direction: 'top', offset: [0, -6] })
+      .addTo(map);
+    flightPath.marks.push(m);
+  });
+}
+function syncFlightPath(force) {
+  const wanted = (selType === 'adsb' && selId) ? selId : null;
+  if (!wanted || !layers.adsb) { if (flightPath.id || flightPath.line) clearFlightPath(); return; }
+  if (flightPath.id !== wanted) { clearFlightPath(); flightPath.id = wanted; force = true; }
+  const a = adsbList.find(x => (x.icao || x.callsign) === wanted);
+  if (force || (Date.now() - flightPath.lastFetch > 30000)) {
+    if (a && a.icao && !flightPath.loading) {
+      flightPath.loading = true; flightPath.lastFetch = Date.now();
+      const myId = wanted;
+      fetch('/api/aircraft_track/' + encodeURIComponent(a.icao.toLowerCase()))
+        .then(r => r.json())
+        .then(j => { if (flightPath.id !== myId) return; flightPath.serverPts = (j && j.found && j.points) ? j.points : null; flightPath.loading = false; drawFlightPath(); })
+        .catch(() => { flightPath.loading = false; });
+    }
+  }
+  drawAirportMarks();
+  drawFlightPath();
+}
+
 function showAdsbDetail(a) {
   document.getElementById('detail').classList.add('vis');
   document.getElementById('d-hid').textContent = a.callsign || a.icao || '—';
@@ -1629,6 +1756,7 @@ function showAdsbDetail(a) {
     '<div class="drow"><div class="dk">Squawk</div><div class="dv">' + (a.squawk||'—') + '</div></div>' +
     '<div class="drow"><div class="dk">Am Boden</div><div class="dv">' + (a.on_ground ? 'Ja' : 'Nein') + '</div></div>' +
     '</div></div>' +
+    acTypeRouteHtml(a) +
     '<div class="dsec"><div class="dsec-t">Position &amp; Bewegung</div><div class="dgrid">' +
     '<div class="drow"><div class="dk">Latitude</div><div class="dv">' + (a.lat != null ? a.lat.toFixed(5) : '—') + '</div></div>' +
     '<div class="drow"><div class="dk">Longitude</div><div class="dv">' + (a.lon != null ? a.lon.toFixed(5) : '—') + '</div></div>' +
@@ -1736,7 +1864,7 @@ function toggleLayer(l) {
   layers[l] = !layers[l];
   document.getElementById('lt-' + l).classList.toggle('on', layers[l]);
   const show = (col, vis) => Object.values(col).forEach(m => { if (m) { if (vis) m.addTo(map); else map.removeLayer(m); } });
-  if (l === 'adsb') { show(adsbMarkers, layers.adsb); show(adsbTrails, layers.adsb); show(adsbPredictLines, layers.adsb); }
+  if (l === 'adsb') { syncFlightPath(true); show(adsbMarkers, layers.adsb); show(adsbTrails, layers.adsb); show(adsbPredictLines, layers.adsb); }
   if (l === 'flarm') show(flarmMarkers, layers.flarm);
   if (l === 'starlink') {
     show(starlinkMarkers, layers.starlink);
@@ -1901,6 +2029,7 @@ function handleUpdate(data) {
   else { renderSmsList(); document.getElementById('list-cnt').textContent = Object.keys(smsTracks).length + ' Absender'; }
 
   if (selId && selType === 'adsb') { const a = adsbList.find(x => (x.icao||x.callsign) === selId); if (a) showAdsbDetail(a); }
+  syncFlightPath();
   if (selId && selType === 'starlink') { const s = starlinkList.find(x => x.norad_id === selId); if (s) showStarlinkDetail(s); }
   if (selId && selType === 'flarm') { const f = flarmList.find(x => x.ogn_id === selId); if (f) showFlarmDetail(f); }
   if (selId && selType === 'sms' && smsTracks[selId]) { showSmsDetail(smsTracks[selId]); }

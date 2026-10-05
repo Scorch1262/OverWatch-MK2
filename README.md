@@ -19,7 +19,9 @@ RTL-SDR, lokaler C-ITS-Empfang) wurde entfernt -- siehe
 ## Funktionen
 
 - **ADS-B** -- Live-Flugzeugpositionen über öffentliche Internet-APIs
-  (adsb.fi / airplanes.live / adsb.lol / OpenSky Network).
+  (adsb.fi / airplanes.live / adsb.lol / OpenSky Network). Beim Anklicken
+  werden Flugzeugtyp, Start-/Zielflughafen (adsbdb.com) und die
+  komplette Flugbahn als durchgehende Linie (adsb.lol) angezeigt.
 - **FLARM/OGN** -- Segelflieger/Kleinflugzeuge über das echte,
   weltweite Open-Glider-Network (`aprs.glidernet.org`).
 - **Starlink** -- Live-Satellitenpositionen aus öffentlichen

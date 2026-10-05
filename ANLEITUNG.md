@@ -204,3 +204,13 @@ passiert optisch gar nichts), der Reihe nach prüfen:
 5. **Weiterhin kein Erfolg:** den Inhalt von `overwatchmk2_console.log`
    bzw. `overwatchmk2_crash.log` (oder die Ausgabe aus Schritt 3) als
    GitHub Issue posten.
+
+
+## 8. Flugzeug anklicken: Typ, Start/Ziel, Flugbahn (ab 1.1.0)
+
+Ein Klick auf ein Flugzeug zeigt im Detailpanel Typ, Kennzeichen,
+Betreiber sowie Start- und Zielflughafen und zeichnet die komplette
+bisherige Flugbahn als durchgehende Linie. Dafür ist eine
+Internetverbindung nötig (adsbdb.com, adsb.lol). Fehlen Daten, steht
+„unbekannt“ im Panel; die Flugbahn fällt dann auf die lokal gesammelte
+Spur zurück.

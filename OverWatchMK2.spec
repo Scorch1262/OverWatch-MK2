@@ -51,7 +51,7 @@ hiddenimports = [
     'email', 'email.mime', 'email.mime.text', 'email.mime.multipart',
     'email.mime.base', 'email.encoders', 'email.utils',
     'email.header', 'email.message', 'email.generator',
-    'yaml',
+    'yaml', 'aircraft_info',
     'logging', 'logging.handlers', 'socket', 'struct', 'select',
     'threading', 'queue', 'platform', 'subprocess', 'argparse',
     'datetime', 'collections', 'json', 'traceback', 'sqlite3',

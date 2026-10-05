@@ -1,5 +1,55 @@
 # OverWatchMK2 – Changelog
 
+## [1.1.0] – Flugzeug-Details: Typ, Start-/Zielflughafen und komplette Flugbahn
+
+### Auftrag / Nutzeranforderung
+
+Beim Anklicken eines Flugzeugs sollen (1) Start- und Zielflughafen,
+(2) der Flugzeugtyp und (3) eine durchgehende Linie der gesamten
+Flugbahn angezeigt werden.
+
+### Änderungen
+
+- **Neu `aircraft_info.py`**: Online-Abfragen mit Cache, Timeouts und
+  Fehlertoleranz.
+  - Typ/Hersteller/Kennzeichen/Halter per ICAO-Hex: adsbdb.com
+    (`/v0/aircraft/{hex}`), 24 h gecacht.
+  - Start/Ziel (Name, ICAO/IATA, Stadt, Land, Koordinaten) und
+    Fluggesellschaft per Callsign: adsbdb.com (`/v0/callsign/{cs}`).
+  - Flugbahn: adsb.lol-Trace-Dateien (`/data/traces/{xx}/trace_full_{hex}.json`);
+    enthält die Datei mehrere Flüge (Lücke > 30 min oder Leg-Flag), wird
+    nur der letzte Flug verwendet; max. 1500 Punkte (Ausdünnung).
+- **`main.py`**: neue Endpunkte `/api/aircraft_info/<icao>?callsign=…` und
+  `/api/aircraft_track/<icao>`; `_normalize_dump1090` reicht zusätzlich
+  `t` (Typcode), `r` (Kennzeichen) und `desc` der ADS-B-Provider durch.
+- **`templates/index.html`**: Detailpanel mit Abschnitten „Flugzeug“
+  (Typ [Typcode], Kennzeichen, Betreiber) und „Flugroute“ (Start, Ziel);
+  Popup zeigt Typ und Route (IATA/ICAO) sobald bekannt. Beim Auswählen
+  wird eine durchgehende (nicht gestrichelte) Linie der kompletten
+  Flugbahn bis zur aktuellen Position gezeichnet, alle 30 s aktualisiert,
+  plus Start-/Ziel-Markierungen. Abwählen/Schließen, anderer
+  Objekttyp oder Ausblenden der ADS-B-Ebene entfernt Linie und Marker.
+  Ist keine Online-Flugbahn verfügbar, wird die lokal seit Seitenstart
+  gesammelte Spur als Rückfall verwendet.
+
+### Einschränkungen (ehrlich)
+
+- Die Route kommt aus einer Callsign-Datenbank: sie kann fehlen oder
+  bei wechselnden Flugnummern veraltet sein („unbekannt“ wird dann angezeigt).
+- Flugbahn-Dateien existieren nur bei adsb.lol-Abdeckung; bei Ausfall
+  der Quelle greift der Rückfall (lokale Spur).
+- Die Quellen (adsbdb.com, adsb.lol) konnten in der Entwicklungsumgebung
+  nicht live erreicht werden; Parser und Endpunkte wurden mit
+  nachgebauten Antworten getestet, das Antwortformat wurde zuvor an den
+  echten Diensten geprüft.
+
+### Tests
+
+py_compile, `node --check` des eingebetteten JavaScripts, Modultest mit
+simulierten Antworten (Typ, Route, 404 „unbekannt“, Verbindungsfehler,
+Trace mit 2 Flügen → nur letzter), Flask-Test-Client für beide Endpunkte,
+Index-Seite liefert 200.
+
 ## [1.0.3] – Oberfläche 1:1 aus OverWatchMK1 übernommen; macOS startet jetzt mit sichtbarem Terminal
 
 ### Auftrag / Nutzeranforderung
