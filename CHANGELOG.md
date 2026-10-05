@@ -1,5 +1,31 @@
 # OverWatchMK2 – Changelog
 
+## [1.1.1] – CI: macOS-Build robuster gegen Runner-Engpässe
+
+### Problem
+GitHub Actions brach ab: "Internal server error … The job was not
+acquired by Runner of type hosted even after multiple attempts – Due to
+capacity constraints, jobs targeting macOS arm64 runners may experience
+longer queue times."
+
+### Ursache
+Kein Code-Fehler: GitHub konnte für das Label `macos-14` (arm64) keinen
+gehosteten Runner bereitstellen (Kapazitätsengpass auf Seiten von GitHub).
+
+### Änderungen (nur .github/workflows/build.yml, App-Code unverändert)
+- macOS-Runner standardmäßig `macos-15` (ebenfalls Apple Silicon/arm64),
+  beim manuellen Start ("Run workflow") wählbar: macos-15 / macos-14 /
+  macos-26. Weiterhin kein Intel/x86.
+- `timeout-minutes: 45` für den macOS-Job (Fehler statt endlosem Hängen).
+- Release-Job läuft auch dann, wenn nur der macOS-Build ausfällt; die
+  Windows-exe wird veröffentlicht, das macOS-Zip nur wenn vorhanden.
+- Version 1.1.1 (VERSION, main.py, Info.plist).
+
+### Verifikation
+YAML-Validierung, py_compile. Echter Runlauf nur auf GitHub möglich;
+bei erneutem Engpass: Workflow erneut starten ("Re-run") bzw. anderen
+Runner im Dialog "Run workflow" wählen.
+
 ## [1.1.0] – Flugzeug-Details: Typ, Start-/Zielflughafen und komplette Flugbahn
 
 ### Auftrag / Nutzeranforderung

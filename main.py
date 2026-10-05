@@ -18,8 +18,8 @@ angeschlossenes GSM-Modem (SIM800/900/7600-kompatibel), siehe
 sms_gateway.py.
 """
 
-OVERWATCH_VERSION = "1.1.0"
-OVERWATCH_BUILD_NOTE = "aircraft-route-type-fullpath"
+OVERWATCH_VERSION = "1.1.1"
+OVERWATCH_BUILD_NOTE = "ci-macos-runner-fallback"
 
 import sys, os, json, time, math, socket, logging, threading, sqlite3
 import argparse, platform, traceback, requests, uuid

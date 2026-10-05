@@ -10,7 +10,14 @@ on:
     tags: [ "v*.*.*" ]
   pull_request:
     branches: [ "main" ]
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      macos_runner:
+        description: "macOS-Runner (nur Apple Silicon/arm64!): macos-15, macos-14 oder macos-26"
+        required: false
+        default: "macos-15"
+        type: choice
+        options: [ "macos-15", "macos-14", "macos-26" ]
 
 permissions:
   contents: write   # nötig, damit der release-Job ein GitHub Release anlegen darf
@@ -70,7 +77,12 @@ jobs:
     # und neuer) unterstützen möchte, entfällt die zuvor eingeführte
     # Intel/arm64-Matrix wieder -- ein einzelner, expliziter
     # arm64-Runner reicht.
-    runs-on: macos-14
+    # Seit 1.1.1: Standard ist "macos-15" (ebenfalls arm64). Der Runner ist
+    # beim manuellen Start waehlbar, falls GitHub fuer ein Label gerade
+    # Kapazitaetsengpaesse meldet ("job was not acquired by Runner").
+    # Alle drei Labels sind Apple-Silicon (arm64), kein Intel.
+    runs-on: ${{ github.event.inputs.macos_runner || 'macos-15' }}
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 
@@ -138,7 +150,7 @@ jobs:
               <key>CFBundleExecutable</key><string>OverWatchMK2</string>
               <key>CFBundleIdentifier</key><string>de.overwatchmk2.app</string>
               <key>CFBundlePackageType</key><string>APPL</string>
-              <key>CFBundleShortVersionString</key><string>1.1.0</string>
+              <key>CFBundleShortVersionString</key><string>1.1.1</string>
               <key>NSHighResolutionCapable</key><true/>
           </dict>
           </plist>
@@ -185,7 +197,9 @@ jobs:
     name: GitHub Release erstellen
     needs: [ build-windows, build-macos ]
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
+    # Seit 1.1.1: Release auch dann, wenn nur der macOS-Build ausfaellt
+    # (z.B. Runner-Kapazitaet) -- die Windows-exe wird dennoch veroeffentlicht.
+    if: ${{ always() && startsWith(github.ref, 'refs/tags/v') && needs.build-windows.result == 'success' }}
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -193,6 +207,7 @@ jobs:
           path: artifacts/windows
 
       - uses: actions/download-artifact@v4
+        if: ${{ needs.build-macos.result == 'success' }}
         with:
           name: OverWatchMK2-macos
           path: artifacts/macos
@@ -203,6 +218,7 @@ jobs:
           zip -r ../../OverWatchMK2-windows.zip .
 
       - name: macOS-Zip an Ort und Stelle benennen
+        if: ${{ needs.build-macos.result == 'success' }}
         run: |
           cp artifacts/macos/OverWatchMK2-macOS.zip ./OverWatchMK2-macos.zip
 
@@ -212,4 +228,5 @@ jobs:
           files: |
             OverWatchMK2-windows.zip
             OverWatchMK2-macos.zip
+          fail_on_unmatched_files: false
           generate_release_notes: true
